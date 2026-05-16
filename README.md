@@ -6,7 +6,6 @@
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 ![Gemini](https://img.shields.io/badge/Powered%20by-Gemini%202.5%20Flash-orange?style=for-the-badge&logo=google&logoColor=white)
 
 </div>
