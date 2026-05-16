@@ -421,12 +421,6 @@ jarvis/
 
 ---
 
-## 📄 Lisans
-
-Bu proje MIT Lisansı ile lisanslanmıştır.
-
----
-
 <div align="center">
-<p>Geliştirici: <a href="https://github.com/bnsware">bnsware</a></p>
+<p>Geliştirici: <a href="https://github.com/bnsware">bnsware</a> ve <a href="https://www.instagram.com/alppunlu">alppunlu</a></p>
 </div>
