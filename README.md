@@ -1,8 +1,8 @@
 <div align="center">
 
-<h1>🤖 J.A.R.V.I.S — Windows AI Asistanı</h1>
+<h1>🤖 J.A.R.V.I.S — Windows AI Assistant</h1>
 
-<p><strong>Gemini Live API veya yerel LM Studio destekli, Türkçe konuşan sesli Windows masaüstü asistanı</strong></p>
+<p><strong>A voice-enabled Windows desktop assistant powered by Gemini Live API or local LM Studio</strong></p>
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white)
@@ -12,118 +12,118 @@
 
 ---
 
-## 📋 İçindekiler
+## 📋 Table of Contents
 
-- [Proje Hakkında](#-proje-hakkında)
-- [Özellikler](#-özellikler)
-- [Mimari](#-mimari)
-- [Gereksinimler](#-gereksinimler)
-- [Kurulum](#-kurulum)
-- [Yapılandırma](#-yapılandırma)
-- [Kullanım](#-kullanım)
-- [Desteklenen Komutlar](#-desteklenen-komutlar)
-- [Yerel Mod (LM Studio)](#-yerel-mod-lm-studio)
-- [Proje Yapısı](#-proje-yapısı)
-- [Katkı](#-katkı)
-
----
-
-## 🎯 Proje Hakkında
-
-JARVIS, Windows masaüstü ortamı için geliştirilmiş gerçek zamanlı sesli AI asistanıdır. Google Gemini 2.5 Flash Live API'yi temel alır ve hem **bulut (Gemini)** hem de **tamamen çevrimdışı yerel (LM Studio)** modda çalışabilir.
-
-Kullanıcıyla **Türkçe** konuşur, sesli komutları anlık olarak işler ve 16'dan fazla entegre araç aracılığıyla Windows'ta gerçek eylemleri hayata geçirir.
+- [About the Project](#-about-the-project)
+- [Features](#-features)
+- [Architecture](#-architecture)
+- [Requirements](#-requirements)
+- [Installation](#-installation)
+- [Configuration](#-configuration)
+- [Usage](#-usage)
+- [Supported Commands](#-supported-commands)
+- [Local Mode (LM Studio)](#-local-mode-lm-studio)
+- [Project Structure](#-project-structure)
+- [Contributing](#-contributing)
 
 ---
 
-## ✨ Özellikler
+## 🎯 About the Project
 
-### Ses ve Konuşma
-- 🎙️ **Gerçek zamanlı ses akışı** — PyAudio ile 16 kHz giriş, 24 kHz çıkış
-- 🔊 **Doğal sesli yanıt** — Gemini Native Audio veya Windows SAPI TTS
-- ✍️ **Metin modu** — Sesle birlikte yazılı komut desteği
-- 🔇 **Duraklat / Devam** — Oturum kesilmeden anlık duraklama
+JARVIS is a real-time voice AI assistant developed for the Windows desktop environment. It is built on the Google Gemini 2.5 Flash Live API and can operate in both **cloud (Gemini)** and **fully offline local (LM Studio)** modes.
 
-### Sistem Entegrasyonu
-- 🖥️ **Uygulama yönetimi** — Herhangi bir Windows uygulamasını sesle aç
-- 📊 **Sistem bilgisi** — CPU, RAM, disk, pil, saat, tarih, ağ durumu
-- 💻 **PowerShell** — Sesli terminal komutları çalıştırma
-- 👁️ **Ekran analizi** — Aktif pencerenin görüntüsünü AI ile analiz etme (Gemini Vision veya LM Studio Vision)
-
-### Üretkenlik
-- 📅 **Takvim** — Outlook veya yerel JSON takvim; okuma, ekleme, silme
-- ⏰ **Anımsatıcı** — Outlook Tasks veya yerel JSON; oluşturma ve listeleme
-- 🧠 **Kalıcı bellek** — Kullanıcıya özel bilgileri JSON'a kaydetme ve silme
-
-### İletişim ve Medya
-- 💬 **WhatsApp** — Desktop veya Web üzerinden mesaj hazırlama ve otomatik gönderme; VCF rehber içe aktarma
-- 🌦️ **Hava durumu** — Anlık hava durumu özeti (OpenWeatherMap)
-- 🎵 **Medya oynatma** — YouTube, Spotify Desktop ve Apple Music Web entegrasyonu
-- 🌐 **Tarayıcı kontrolü** — URL açma, Google arama, YouTube video oynatma
-- 📈 **YouTube Analytics** — Kanal istatistikleri ve video performans raporu
-
-### Çift Backend Desteği
-- ☁️ **Gemini modu** — Google Gemini 2.5 Flash Live API
-- 🏠 **Yerel mod** — LM Studio (OpenAI-uyumlu) ile tamamen çevrimdışı çalışma; Whisper veya Google STT
+It communicates with the user via voice, processes voice commands in real time, and executes real actions on Windows through 16+ integrated tools.
 
 ---
 
-## 🏗️ Mimari
+## ✨ Features
+
+### Voice and Speech
+- 🎙️ **Real-time audio streaming** — 16 kHz input, 24 kHz output via PyAudio
+- 🔊 **Natural voice responses** — Gemini Native Audio or Windows SAPI TTS
+- ✍️ **Text mode** — Written command support alongside voice
+- 🔇 **Pause / Resume** — Instant pause without dropping the session
+
+### System Integration
+- 🖥️ **Application management** — Open any Windows application by voice
+- 📊 **System info** — CPU, RAM, disk, battery, time, date, network status
+- 💻 **PowerShell** — Run terminal commands via voice
+- 👁️ **Screen analysis** — Capture and analyze the active window with AI (Gemini Vision or LM Studio Vision)
+
+### Productivity
+- 📅 **Calendar** — Outlook or local JSON calendar; read, add, and delete events
+- ⏰ **Reminders** — Outlook Tasks or local JSON; create and list reminders
+- 🧠 **Persistent memory** — Save and delete user-specific information in JSON
+
+### Communication and Media
+- 💬 **WhatsApp** — Compose and auto-send messages via Desktop or Web; import VCF contacts
+- 🌦️ **Weather** — Real-time weather summary (OpenWeatherMap)
+- 🎵 **Media playback** — YouTube, Spotify Desktop, and Apple Music Web integration
+- 🌐 **Browser control** — Open URLs, Google search, play YouTube videos
+- 📈 **YouTube Analytics** — Channel statistics and video performance reports
+
+### Dual Backend Support
+- ☁️ **Gemini mode** — Google Gemini 2.5 Flash Live API
+- 🏠 **Local mode** — Fully offline operation with LM Studio (OpenAI-compatible); Whisper or Google STT
+
+---
+
+## 🏗️ Architecture
 
 ```
 jarvis/
-├── main.py                  ← Gemini Live oturum yöneticisi (JarvisLive)
-├── ui.py                    ← Tkinter tabanlı masaüstü arayüzü (JarvisUI)
-├── app_config.py            ← Yapılandırma okuma/yazma
+├── main.py                  ← Gemini Live session manager (JarvisLive)
+├── ui.py                    ← Tkinter-based desktop UI (JarvisUI)
+├── app_config.py            ← Configuration read/write
 ├── core/
-│   ├── lmstudio_runtime.py  ← Yerel mod motoru (JarvisLocal)
-│   └── prompt.txt           ← AI sistem promptu
-├── actions/                 ← Araç modülleri
+│   ├── lmstudio_runtime.py  ← Local mode engine (JarvisLocal)
+│   └── prompt.txt           ← AI system prompt
+├── actions/                 ← Tool modules
 │   └── ...
-├── memory/                  ← Kalıcı bellek
-└── config/                  ← API anahtarları
+├── memory/                  ← Persistent memory
+└── config/                  ← API keys
 ```
 
-### Veri Akışı — Gemini Modu
+### Data Flow — Gemini Mode
 
 ```
-Mikrofon → PyAudio → Gemini Live API
-                           ↓
-                    Tool Call Tespiti
-                           ↓
-                    actions/* modülleri
-                           ↓
-                    Sonuç → Gemini → Ses Çıkışı → Hoparlör
+Microphone → PyAudio → Gemini Live API
+                             ↓
+                      Tool Call Detection
+                             ↓
+                      actions/* modules
+                             ↓
+                      Result → Gemini → Audio Output → Speaker
 ```
 
-### Veri Akışı — Yerel Mod
+### Data Flow — Local Mode
 
 ```
-Mikrofon → SpeechRecognition (Whisper/Google STT) → Metin
-                                                        ↓
-                                                 LM Studio API
-                                                        ↓
-                                                Tool Call Tespiti
-                                                        ↓
-                                                actions/* modülleri
-                                                        ↓
-                                                Metin → Windows SAPI TTS → Hoparlör
+Microphone → SpeechRecognition (Whisper/Google STT) → Text
+                                                          ↓
+                                                   LM Studio API
+                                                          ↓
+                                                  Tool Call Detection
+                                                          ↓
+                                                  actions/* modules
+                                                          ↓
+                                                  Text → Windows SAPI TTS → Speaker
 ```
 
 ---
 
-## 📦 Gereksinimler
+## 📦 Requirements
 
-| Gereksinim | Detay |
-|-----------|-------|
-| **Python** | 3.10 veya üzeri |
-| **İşletim Sistemi** | Windows 10 / 11 |
-| **Gemini API Anahtarı** | [Google AI Studio](https://aistudio.google.com/apikey)'dan ücretsiz alınır |
-| **Mikrofon** | Herhangi bir USB veya dahili mikrofon |
-| **YouTube API** | Opsiyonel — kanal istatistikleri için |
-| **LM Studio** | Opsiyonel — yerel çevrimdışı mod için |
+| Requirement | Details |
+|-------------|---------|
+| **Python** | 3.10 or higher |
+| **Operating System** | Windows 10 / 11 |
+| **Gemini API Key** | Free from [Google AI Studio](https://aistudio.google.com/apikey) |
+| **Microphone** | Any USB or built-in microphone |
+| **YouTube API** | Optional — for channel statistics |
+| **LM Studio** | Optional — for local offline mode |
 
-### Python Bağımlılıkları
+### Python Dependencies
 
 ```
 google-genai
@@ -135,34 +135,34 @@ requests
 pyautogui
 pyttsx3
 pywin32
-openai-whisper  (opsiyonel, yerel STT için)
+openai-whisper  (optional, for local STT)
 ```
 
 ---
 
-## 🚀 Kurulum
+## 🚀 Installation
 
-### 1. Depoyu Klonla
+### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/bnsware/jarvis.git
 cd jarvis
 ```
 
-### 2. Otomatik Kurulum (Önerilen)
+### 2. Automatic Setup (Recommended)
 
 ```batch
 setup.bat
 ```
 
-Bu script sırasıyla şunları yapar:
-- Python varlığını kontrol eder
-- `venv` sanal ortamı oluşturur
-- Gerekli fontları Windows'a kurar
-- `requirements.txt` paketlerini yükler
-- `config/api_keys.json` dosyasını şablondan oluşturur
+This script performs the following steps in order:
+- Checks for Python installation
+- Creates a `venv` virtual environment
+- Installs required fonts on Windows
+- Installs packages from `requirements.txt`
+- Creates `config/api_keys.json` from the template
 
-### 3. Manuel Kurulum
+### 3. Manual Setup
 
 ```bash
 python -m venv venv
@@ -171,7 +171,7 @@ pip install -r requirements.txt
 copy config\api_keys.example.json config\api_keys.json
 ```
 
-> **Not:** PyAudio kurulumunda hata alırsanız:
+> **Note:** If you get an error installing PyAudio:
 > ```bash
 > pip install pipwin
 > pipwin install pyaudio
@@ -179,160 +179,160 @@ copy config\api_keys.example.json config\api_keys.json
 
 ---
 
-## ⚙️ Yapılandırma
+## ⚙️ Configuration
 
-`config/api_keys.json` dosyasını düzenle:
+Edit the `config/api_keys.json` file:
 
 ```json
 {
   "gemini_api_key": "AIza...",
   "voice": "Charon",
   "youtube_api_key": "",
-  "youtube_channel_handle": "@kanalin",
+  "youtube_channel_handle": "@yourchannel",
   "backend": "gemini",
   "lmstudio_base_url": "http://127.0.0.1:1234/v1",
   "lmstudio_model": "local-model",
   "lmstudio_api_key": "lm-studio",
   "stt_engine": "whisper",
-  "stt_language": "tr-TR"
+  "stt_language": "en-US"
 }
 ```
 
-| Alan | Açıklama | Zorunlu |
-|------|----------|---------|
-| `gemini_api_key` | Google Gemini API anahtarı | Gemini modunda evet |
-| `voice` | Ses tonu: `Charon`, `Aoede`, `Fenrir`, `Kore`, `Puck` | Hayır |
-| `youtube_api_key` | YouTube Data API v3 anahtarı | Kanal raporu için |
-| `youtube_channel_handle` | `@kanalin` formatında handle | Kanal raporu için |
-| `backend` | `gemini` veya `lmstudio` | Hayır (varsayılan: gemini) |
-| `lmstudio_base_url` | LM Studio sunucu adresi | Yerel modda evet |
-| `lmstudio_model` | Kullanılacak yerel model adı | Yerel modda evet |
-| `stt_engine` | `whisper` veya `google` | Yerel modda |
-| `stt_language` | STT dil kodu | Yerel modda |
+| Field | Description | Required |
+|-------|-------------|----------|
+| `gemini_api_key` | Google Gemini API key | Yes in Gemini mode |
+| `voice` | Voice tone: `Charon`, `Aoede`, `Fenrir`, `Kore`, `Puck` | No |
+| `youtube_api_key` | YouTube Data API v3 key | For channel reports |
+| `youtube_channel_handle` | Handle in `@yourchannel` format | For channel reports |
+| `backend` | `gemini` or `lmstudio` | No (default: gemini) |
+| `lmstudio_base_url` | LM Studio server address | Yes in local mode |
+| `lmstudio_model` | Local model name to use | Yes in local mode |
+| `stt_engine` | `whisper` or `google` | In local mode |
+| `stt_language` | STT language code | In local mode |
 
 ---
 
-## 🎮 Kullanım
+## 🎮 Usage
 
-### Başlatma
+### Launching
 
 ```batch
 start.bat
 ```
 
-veya manuel:
+or manually:
 
 ```bash
 venv\Scripts\activate
 python main.py
 ```
 
-### Arayüz
+### Interface
 
-JARVIS açıldığında modern bir masaüstü penceresi görünür:
+When JARVIS opens, a modern desktop window appears:
 
-- **Durum göstergesi** — `LISTENING`, `THINKING`, `SPEAKING`, `ERROR`
-- **Log paneli** — Gerçek zamanlı konuşma akışı
-- **Metin kutusu** — Sesle birlikte yazılı komut girebilirsin
-- **Duraklat butonu** — Oturumu kesmeden asistanı susturur
-- **Sistem paneli** — CPU, RAM, pil ve hava durumu widget'ları
+- **Status indicator** — `LISTENING`, `THINKING`, `SPEAKING`, `ERROR`
+- **Log panel** — Real-time conversation stream
+- **Text box** — Enter written commands alongside voice
+- **Pause button** — Silences the assistant without dropping the session
+- **System panel** — CPU, RAM, battery, and weather widgets
 
 ---
 
-## 🗣️ Desteklenen Komutlar
+## 🗣️ Supported Commands
 
-### Sistem ve Uygulamalar
-
-```
-"Spotify'ı aç"
-"VS Code'u başlat"
-"Pil durumu nedir?"
-"RAM kullanımı kaç?"
-"Saat kaç?"
-"Masaüstündeki dosyaları listele"
-```
-
-### Takvim
+### System and Applications
 
 ```
-"Bugün takvimimde ne var?"
-"Yarın ajandam nasıl?"
-"Sıradaki toplantım ne?"
-"Önümüzdeki 30 gün takvimimde ne var?"
-"Yarın 14:00'e dişçi randevusu ekle"
-"Pazartesi 10:00-11:00 toplantı ekle"
-"Takvimden toplantıyı sil"
+"Open Spotify"
+"Launch VS Code"
+"What's the battery status?"
+"How much RAM is being used?"
+"What time is it?"
+"List files on the desktop"
 ```
 
-### Anımsatıcılar
+### Calendar
 
 ```
-"Bugün anımsatıcılarım ne?"
-"Yaklaşan hatırlatmalarımı göster"
-"Yarın sabah 9'da dişçiyi hatırlat"
-"Bugün akşam süt almayı hatırlat"
+"What's on my calendar today?"
+"What's my schedule tomorrow?"
+"What's my next meeting?"
+"What's on my calendar for the next 30 days?"
+"Add a dentist appointment tomorrow at 2 PM"
+"Add a meeting Monday from 10:00 to 11:00"
+"Delete the meeting from my calendar"
 ```
 
-### Hava Durumu ve Tarayıcı
+### Reminders
 
 ```
-"Hatay'da hava nasıl?"
-"Google'da Python öğren ara"
-"YouTube'dan The Weeknd Blinding Lights aç"
-"github.com'u aç"
+"What are my reminders for today?"
+"Show my upcoming reminders"
+"Remind me about the dentist tomorrow morning at 9"
+"Remind me to buy milk this evening"
 ```
 
-### Medya
+### Weather and Browser
 
 ```
-"Spotify'da The Weeknd Blinding Lights çal"
-"Apple Music'te Sezen Aksu Gülümse aç"
-"YouTube'da lofi beats oynat"
+"What's the weather in New York?"
+"Search Google for learn Python"
+"Open The Weeknd Blinding Lights on YouTube"
+"Open github.com"
+```
+
+### Media
+
+```
+"Play The Weeknd Blinding Lights on Spotify"
+"Open Adele Hello on Apple Music"
+"Play lofi beats on YouTube"
 ```
 
 ### WhatsApp
 
 ```
-"Anneme WhatsApp'tan iyi geceler mesajı gönder"
-"Ahmet'e WhatsApp mesajı hazırla: yarın görüşelim"
+"Send a goodnight message to Mom on WhatsApp"
+"Prepare a WhatsApp message to John: let's meet tomorrow"
 ```
 
-### Ekran Analizi
+### Screen Analysis
 
 ```
-"Ekranda ne var?"
-"Bu hatayı oku"
-"Bu pencereyi analiz et"
-"Burada ne yazıyor?"
+"What's on the screen?"
+"Read this error"
+"Analyze this window"
+"What does it say here?"
 ```
 
 ### YouTube Analytics
 
 ```
-"YouTube istatistiklerim nasıl?"
-"Son videolarımı analiz et"
-"Kanal büyümemi özetle"
+"How are my YouTube stats?"
+"Analyze my recent videos"
+"Summarize my channel growth"
 ```
 
-### Bellek
+### Memory
 
 ```
-"Benim adım Ali"
-"Projem bir Python uygulaması"
-"Claude limiti notunu hafızandan kaldır"
-"Bunu hafızandan sil"
+"My name is Alex"
+"My project is a Python application"
+"Remove the Claude limit note from your memory"
+"Forget this"
 ```
 
 ---
 
-## 🏠 Yerel Mod (LM Studio)
+## 🏠 Local Mode (LM Studio)
 
-İnternet bağlantısı gerektirmeden tamamen yerel çalışmak için:
+To run entirely locally without an internet connection:
 
-**1. LM Studio'yu indir ve bir model yükle:**
-[lmstudio.ai](https://lmstudio.ai) adresinden indir, bir model seçip sunucuyu başlat.
+**1. Download LM Studio and load a model:**
+Download from [lmstudio.ai](https://lmstudio.ai), select a model, and start the server.
 
-**2. `config/api_keys.json` dosyasını güncelle:**
+**2. Update `config/api_keys.json`:**
 ```json
 {
   "backend": "lmstudio",
@@ -342,84 +342,84 @@ JARVIS açıldığında modern bir masaüstü penceresi görünür:
 }
 ```
 
-**3. Ekran analizi için vision modeli:**
+**3. For screen analysis, add a vision model:**
 ```json
 {
   "lmstudio_vision_model": "xtuner/llava-llama-3-8b-v1_1-gguf"
 }
 ```
 
-**Yerel modda neler değişir:**
-- Ses girişi → Whisper (yerel) veya Google STT
-- Ses çıkışı → Windows SAPI TTS (sistem sesi)
-- AI motoru → LM Studio OpenAI-uyumlu API
-- Tüm araçlar aynı şekilde çalışır
+**What changes in local mode:**
+- Audio input → Whisper (local) or Google STT
+- Audio output → Windows SAPI TTS (system voice)
+- AI engine → LM Studio OpenAI-compatible API
+- All tools work the same way
 
 ---
 
-## 📁 Proje Yapısı
+## 📁 Project Structure
 
 ```
 jarvis/
-├── main.py                  ← Ana giriş noktası ve Gemini Live motoru
-├── ui.py                    ← Masaüstü arayüzü (Tkinter)
-├── app_config.py            ← Yapılandırma yöneticisi
-├── requirements.txt         ← Python bağımlılıkları
-├── setup.bat                ← Otomatik kurulum scripti
-├── start.bat                ← Hızlı başlatma scripti
-├── pyrightconfig.json       ← Tip denetimi yapılandırması
+├── main.py                  ← Entry point and Gemini Live engine
+├── ui.py                    ← Desktop UI (Tkinter)
+├── app_config.py            ← Configuration manager
+├── requirements.txt         ← Python dependencies
+├── setup.bat                ← Automatic setup script
+├── start.bat                ← Quick launch script
+├── pyrightconfig.json       ← Type checking configuration
 ├── .gitignore
-├── Fonts/                   ← Arayüz fontları
-├── Icon/                    ← Uygulama ikonu
-├── SFX/                     ← Ses efektleri
+├── Fonts/                   ← UI fonts
+├── Icon/                    ← Application icon
+├── SFX/                     ← Sound effects
 ├── core/
-│   ├── lmstudio_runtime.py  ← Yerel AI motoru
-│   └── prompt.txt           ← Sistem promptu
+│   ├── lmstudio_runtime.py  ← Local AI engine
+│   └── prompt.txt           ← System prompt
 ├── actions/
 │   ├── __init__.py
-│   ├── browser.py           ← Web tarayıcı kontrolü
-│   ├── calendar.py          ← Takvim işlemleri (Outlook + JSON)
-│   ├── health.py            ← Sağlık takibi
-│   ├── media.py             ← Müzik/video oynatma
-│   ├── open_app.py          ← Uygulama başlatma
-│   ├── reminders.py         ← Anımsatıcı işlemleri (Outlook + JSON)
-│   ├── screen_vision.py     ← Ekran görüntüsü + Vision AI
-│   ├── shell.py             ← PowerShell entegrasyonu
-│   ├── sys_info.py          ← Sistem bilgisi (psutil)
-│   ├── tts.py               ← Windows SAPI metin-konuşma
-│   ├── weather.py           ← Hava durumu (OpenWeatherMap)
-│   ├── whatsapp.py          ← WhatsApp mesajlaşma
+│   ├── browser.py           ← Web browser control
+│   ├── calendar.py          ← Calendar operations (Outlook + JSON)
+│   ├── health.py            ← Health tracking
+│   ├── media.py             ← Music/video playback
+│   ├── open_app.py          ← Application launcher
+│   ├── reminders.py         ← Reminder operations (Outlook + JSON)
+│   ├── screen_vision.py     ← Screenshot + Vision AI
+│   ├── shell.py             ← PowerShell integration
+│   ├── sys_info.py          ← System info (psutil)
+│   ├── tts.py               ← Windows SAPI text-to-speech
+│   ├── weather.py           ← Weather (OpenWeatherMap)
+│   ├── whatsapp.py          ← WhatsApp messaging
 │   └── youtube_stats.py     ← YouTube Data API
 ├── memory/
 │   ├── __init__.py
-│   ├── memory_manager.py    ← JSON bellek yöneticisi
-│   ├── memory.example.json  ← Bellek şablonu
-│   └── phone_book.example.json ← Telefon rehberi şablonu
+│   ├── memory_manager.py    ← JSON memory manager
+│   ├── memory.example.json  ← Memory template
+│   └── phone_book.example.json ← Phone book template
 └── config/
-    ├── api_keys.json        ← API anahtarları (gitignore'd)
-    └── api_keys.example.json ← Şablon
+    ├── api_keys.json        ← API keys (gitignored)
+    └── api_keys.example.json ← Template
 ```
 
 ---
 
-## 🔒 Güvenlik
+## 🔒 Security
 
-- `config/api_keys.json` ve `memory/memory.json` dosyaları `.gitignore`'a eklenmiştir — API anahtarların ve kişisel veriler repoya dahil olmaz.
-- `phone_book.json` da yayımlanmaz.
-- Yalnızca `*.example.json` şablonları repoya dahildir.
+- `config/api_keys.json` and `memory/memory.json` are added to `.gitignore` — your API keys and personal data will not be included in the repository.
+- `phone_book.json` is also excluded from publishing.
+- Only `*.example.json` templates are included in the repository.
 
 ---
 
-## 🤝 Katkı
+## 🤝 Contributing
 
-1. Bu repoyu fork'la
-2. Yeni bir dal oluştur: `git checkout -b feature/yeni-ozellik`
-3. Değişikliklerini kaydet: `git commit -m "Yeni özellik: açıklama"`
-4. Dalını gönder: `git push origin feature/yeni-ozellik`
-5. Pull Request aç
+1. Fork this repository
+2. Create a new branch: `git checkout -b feature/new-feature`
+3. Commit your changes: `git commit -m "New feature: description"`
+4. Push your branch: `git push origin feature/new-feature`
+5. Open a Pull Request
 
 ---
 
 <div align="center">
-<p>Geliştirici: <a href="https://github.com/bnsware">bnsware</a> ve <a href="https://www.instagram.com/alppunlu">alppunlu</a></p>
+<p>Developed by <a href="https://github.com/bnsware">bnsware</a> and <a href="https://www.instagram.com/alppunlu">alppunlu</a></p>
 </div>
