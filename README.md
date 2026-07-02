@@ -16,6 +16,7 @@
 
 - [About the Project](#-about-the-project)
 - [Features](#-features)
+- [What's New in This Fork](#-whats-new-in-this-fork)
 - [Architecture](#-architecture)
 - [Requirements](#-requirements)
 - [Installation](#-installation)
@@ -33,6 +34,28 @@
 JARVIS is a real-time voice AI assistant developed for the Windows desktop environment. It is built on the Google Gemini 2.5 Flash Live API and can operate in both **cloud (Gemini)** and **fully offline local (LM Studio)** modes.
 
 It communicates with the user via voice, processes voice commands in real time, and executes real actions on Windows through 16+ integrated tools.
+
+---
+
+## ✨ What's New in This Fork
+
+This fork includes the following enhancements over the original:
+
+### 🇬🇧 Full UK English Translation
+The entire user interface has been translated from Turkish to UK English — all labels, status messages, tooltips, and settings text are now in clear English.
+
+### 🎨 Custom UI Colour Picker
+You can now change the primary accent colour of the interface directly from the settings panel:
+- Click the **"Primary Colour"** button in the Settings panel
+- Pick any colour from the system colour picker
+- The UI instantly updates — rings, text, buttons, and accents all reflect your chosen colour
+- Your preference is saved and restored the next time you launch JARVIS
+
+### 🖥️ Other Improvements
+- All action modules (weather, browser, media, etc.) have been reviewed for English consistency
+- Cleaned up Turkish comments and variable names throughout the codebase
+- Added `translate_ui.py` helper script for future translation maintenance
+
 
 ---
 
@@ -145,9 +168,10 @@ openai-whisper  (optional, for local STT)
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/bnsware/jarvis.git
-cd jarvis
+git clone https://github.com/bobguffie/jarvis-windows.git
+cd jarvis-windows
 ```
+
 
 ### 2. Automatic Setup (Recommended)
 
