@@ -168,9 +168,10 @@ openai-whisper  (optional, for local STT)
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/bobguffie/jarvis-windows.git
-cd jarvis-windows
+git clone https://github.com/bobguffie/jarvis-windows-english.git
+cd jarvis-windows-english
 ```
+
 
 
 ### 2. Automatic Setup (Recommended)
