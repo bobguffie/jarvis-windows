@@ -1,5 +1,5 @@
 """
-Sistem bilgisi — Windows surumu (psutil + netsh wlan).
+System information — Windows version (psutil + netsh wlan).
 """
 
 import subprocess
@@ -32,17 +32,17 @@ def sys_info(query: str) -> str:
 
     if query in ("time", "saat", "zaman", "all"):
         now = datetime.datetime.now()
-        results.append(f"Saat: {now.strftime('%H:%M:%S')}")
+        results.append(f"Time: {now.strftime('%H:%M:%S')}")
 
     if query in ("date", "tarih", "all"):
         now = datetime.datetime.now()
-        results.append(f"Tarih: {now.strftime('%d %B %Y, %A')}")
+        results.append(f"Date: {now.strftime('%d %B %Y, %A')}")
 
     if query in ("network", "ag", "ağ", "wifi", "all"):
         results.append(_network())
 
     if not results:
-        results.append(f"Bilinmeyen sorgu: {query}. battery/cpu/ram/disk/time/date/network/all kullanin.")
+        results.append(f"Unknown query: {query}. Use battery/cpu/ram/disk/time/date/network/all.")
 
     return "\n".join(r for r in results if r)
 
@@ -51,10 +51,10 @@ def _battery() -> str:
     if HAS_PSUTIL:
         bat = psutil.sensors_battery()
         if bat:
-            status = "Sarj oluyor" if bat.power_plugged else "Pilde"
-            return f"Pil: %{bat.percent:.0f} - {status}"
-        return "Pil sensoru bulunamadi (masaustu sistem olabilir)."
-    return "Pil bilgisi alinamadi."
+            status = "Charging" if bat.power_plugged else "On battery"
+            return f"Battery: %{bat.percent:.0f} - {status}"
+        return "Battery sensor not found (may be a desktop system)."
+    return "Battery information unavailable."
 
 
 def _cpu() -> str:
@@ -63,8 +63,8 @@ def _cpu() -> str:
         count = psutil.cpu_count(logical=True)
         freq = psutil.cpu_freq()
         freq_str = f", {freq.current:.0f} MHz" if freq else ""
-        return f"CPU: %{usage:.1f} kullanim - {count} cekirdek{freq_str}"
-    return "CPU bilgisi alinamadi."
+        return f"CPU: %{usage:.1f} usage - {count} cores{freq_str}"
+    return "CPU information unavailable."
 
 
 def _ram() -> str:
@@ -73,8 +73,8 @@ def _ram() -> str:
         total = vm.total / (1024 ** 3)
         used = vm.used / (1024 ** 3)
         pct = vm.percent
-        return f"RAM: {used:.1f}GB / {total:.1f}GB kullanimda (%{pct:.0f})"
-    return "RAM bilgisi alinamadi."
+        return f"RAM: {used:.1f}GB / {total:.1f}GB in use (%{pct:.0f})"
+    return "RAM information unavailable."
 
 
 def _disk() -> str:
@@ -84,8 +84,8 @@ def _disk() -> str:
         total = du.total / (1024 ** 3)
         used = du.used / (1024 ** 3)
         free = du.free / (1024 ** 3)
-        return f"Disk ({drive}): {used:.1f}GB kullanildi, {free:.1f}GB bos (toplam {total:.1f}GB)"
-    return "Disk bilgisi alinamadi."
+        return f"Disk ({drive}): {used:.1f}GB used, {free:.1f}GB free (total {total:.1f}GB)"
+    return "Disk information unavailable."
 
 
 def _network() -> str:
@@ -108,9 +108,9 @@ def _network() -> str:
                 if len(parts) == 2:
                     state = parts[1].strip()
         if ssid:
-            return f"WiFi: {ssid} bagli"
+            return f"WiFi: {ssid} connected"
         if state:
-            return f"WiFi durumu: {state}"
+            return f"WiFi state: {state}"
     except Exception:
         pass
 
@@ -128,8 +128,8 @@ def _network() -> str:
                         and not addr.startswith("169.254.")
                         and getattr(family, "name", str(family)).endswith("AF_INET")
                     ):
-                        return f"Ag: {iface} IP {addr}"
+                        return f"Network: {iface} IP {addr}"
         except Exception:
             pass
 
-    return "Ag baglantisi bulunamadi."
+    return "No network connection found."

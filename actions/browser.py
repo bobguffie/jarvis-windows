@@ -1,6 +1,6 @@
 """
-Tarayici kontrolu — Windows surumu.
-Varsayilan tarayiciyi os.startfile / webbrowser ile acar.
+Browser control — Windows version.
+Opens the default browser via os.startfile / webbrowser.
 """
 
 from __future__ import annotations
@@ -42,23 +42,23 @@ def _find_first_youtube_video(query: str) -> str | None:
 def browser_control(action: str, url: str = None, query: str = None) -> str:
     if action == "open_url":
         if not url:
-            return "URL belirtilmedi."
+            return "No URL specified."
         if not url.startswith(("http://", "https://")):
             url = "https://" + url
         _open(url)
-        return f"Acildi: {url}"
+        return f"Opened: {url}"
 
     elif action == "search":
         if not query:
-            return "Arama sorgusu belirtilmedi."
+            return "No search query specified."
         encoded = urllib.parse.quote(query)
         search_url = f"https://www.google.com/search?q={encoded}"
         _open(search_url)
-        return f"'{query}' icin arama acildi."
+        return f"Search opened for '{query}'."
 
     elif action in ("play_youtube", "youtube_play", "play_music"):
         if not query:
-            return "YouTube icin arama sorgusu belirtilmedi."
+            return "No search query specified for YouTube."
 
         try:
             video_id = _find_first_youtube_video(query)
@@ -67,18 +67,18 @@ def browser_control(action: str, url: str = None, query: str = None) -> str:
             fallback_url = f"https://www.youtube.com/results?search_query={encoded}"
             _open(fallback_url)
             return (
-                f"YouTube ilk sonucu alinamadi ({exc}). "
-                f"Arama sonuclari acildi: {query}"
+                f"Could not get first YouTube result ({exc}). "
+                f"Search results opened: {query}"
             )
 
         if not video_id:
             encoded = urllib.parse.quote(query)
             fallback_url = f"https://www.youtube.com/results?search_query={encoded}"
             _open(fallback_url)
-            return f"YouTube'da dogrudan video bulunamadi. Arama sonuclari acildi: {query}"
+            return f"No direct video found on YouTube. Search results opened: {query}"
 
         watch_url = f"https://www.youtube.com/watch?v={video_id}&autoplay=1"
         _open(watch_url)
-        return f"YouTube'da oynatiliyor: {query}"
+        return f"Playing on YouTube: {query}"
 
-    return f"Bilinmeyen eylem: {action}"
+    return f"Unknown action: {action}"

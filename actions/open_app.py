@@ -1,6 +1,6 @@
 """
-Uygulama acma — Windows surumu.
-Windows 'start' komutu, AppsFolder ve PATH araciligiyla calisir.
+Open applications — Windows version.
+Works via Windows 'start' command, AppsFolder, and PATH.
 """
 
 from __future__ import annotations
@@ -17,14 +17,14 @@ APP_ALIASES = {
     "firefox":      "firefox",
     "brave":        "brave",
     "opera":        "opera",
-    "safari":       "msedge",  # macOS analogu
+    "safari":       "msedge",  # macOS analog
     "terminal":     "wt",       # Windows Terminal
     "powershell":   "powershell",
     "cmd":          "cmd",
-    "komut istemi": "cmd",
+    "command prompt": "cmd",
     "explorer":     "explorer",
     "finder":       "explorer",
-    "dosya gezgini": "explorer",
+    "file explorer": "explorer",
     "spotify":      "spotify",
     "vscode":       "code",
     "vs code":      "code",
@@ -40,27 +40,17 @@ APP_ALIASES = {
     "mail":         "outlook",
     "outlook":      "outlook",
     "calendar":     "outlookcal:",
-    "takvim":       "outlookcal:",
     "notes":        "notepad",
-    "notlar":       "notepad",
     "notepad":      "notepad",
     "music":        "ms-windows-store://pdp/?ProductId=9wzdncrfj3pt",
-    "müzik":        "wmplayer",
     "media player": "wmplayer",
     "photos":       "ms-photos:",
-    "fotoğraflar":  "ms-photos:",
     "maps":         "bingmaps:",
-    "haritalar":    "bingmaps:",
     "calculator":   "calc",
-    "hesap makinesi": "calc",
-    "ayarlar":      "ms-settings:",
     "settings":     "ms-settings:",
     "system settings": "ms-settings:",
     "task manager": "taskmgr",
-    "gorev yoneticisi": "taskmgr",
-    "görev yöneticisi": "taskmgr",
     "control panel": "control",
-    "denetim masasi": "control",
     "preview":      "mspaint",
     "textedit":     "notepad",
     "figma":        "figma",
@@ -69,7 +59,7 @@ APP_ALIASES = {
 }
 
 
-# Yerel kurulum uzantilari — start komutu uri schemelerini de tanir
+# Local installation extensions — also recognizes URI schemes for start command
 _URI_PREFIXES = (
     "ms-settings:", "ms-photos:", "bingmaps:", "outlookcal:",
     "ms-windows-store:", "shell:", "spotify:",
@@ -85,7 +75,7 @@ def _start_uri(uri: str) -> bool:
 
 
 def _start_command(name: str) -> bool:
-    """Windows 'start' komutu uygulamayi ad olarak acmayi dener."""
+    """Attempts to open an app by name using the Windows 'start' command."""
     try:
         result = subprocess.run(
             ["cmd", "/c", "start", "", "/B", name],
@@ -97,7 +87,7 @@ def _start_command(name: str) -> bool:
 
 
 def _registry_app_paths(name: str) -> str | None:
-    """HKLM/HKCU App Paths altinda exe ara."""
+    """Search for exe under HKLM/HKCU App Paths."""
     candidates = [name, name + ".exe"]
     roots = (
         (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"),
@@ -117,22 +107,22 @@ def _registry_app_paths(name: str) -> str | None:
 
 def open_app(app_name: str) -> str:
     if not app_name:
-        return "Uygulama adi belirtilmedi."
+        return "No application name specified."
 
     normalized = app_name.lower().strip()
     resolved = APP_ALIASES.get(normalized, app_name)
 
-    # 1. URI scheme (ms-settings, spotify:, vs.)
+    # 1. URI scheme (ms-settings, spotify:, etc.)
     if any(resolved.startswith(p) for p in _URI_PREFIXES):
         if _start_uri(resolved):
-            return f"{app_name} acildi."
+            return f"{app_name} opened."
 
-    # 2. PATH'de exe varsa dogrudan ac
+    # 2. If exe is in PATH, open directly
     exe = shutil.which(resolved) or shutil.which(resolved + ".exe")
     if exe:
         try:
             subprocess.Popen([exe], close_fds=True)
-            return f"{resolved} acildi."
+            return f"{resolved} opened."
         except Exception:
             pass
 
@@ -141,19 +131,19 @@ def open_app(app_name: str) -> str:
     if reg_exe:
         try:
             subprocess.Popen([reg_exe], close_fds=True)
-            return f"{resolved} acildi."
+            return f"{resolved} opened."
         except Exception:
             pass
 
-    # 4. start "" komutu (Start Menu ad eslestirmesi)
+    # 4. start "" command (Start Menu name matching)
     if _start_command(resolved):
-        return f"{resolved} acildi."
+        return f"{resolved} opened."
 
-    # 5. os.startfile fallback (dosya/url)
+    # 5. os.startfile fallback (file/url)
     try:
         os.startfile(resolved)
-        return f"{app_name} acildi."
+        return f"{app_name} opened."
     except OSError:
         pass
 
-    return f"'{app_name}' bulunamadi veya acilamadi."
+    return f"'{app_name}' not found or could not be opened."

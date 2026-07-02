@@ -1,409 +1,314 @@
 """
-actions/health.py — Windows sistem sagligi (vitals).
+Health — Windows version.
 
-Eski iPhone HealthAutoExport JSON akisinin yerine bu Windows surumu
-psutil + WMI uzerinden makinenin canli "saglik" gostergelerini doner:
-CPU, RAM, disk, pil, sicaklik, ag, uptime, surec sayisi.
-
-Public API korunur:
-  - get_health_data(query: str) -> str
-  - get_welcome_health_summary() -> str
+Provides health-related information and reminders.
+Uses local memory for health data storage.
 """
 
 from __future__ import annotations
 
-import time
-import shutil
-import platform
-import datetime as _dt
-
-try:
-    import psutil
-    HAS_PSUTIL = True
-except ImportError:
-    HAS_PSUTIL = False
-
-try:
-    import wmi  # type: ignore
-    _WMI = wmi.WMI(namespace="root\\OpenHardwareMonitor")
-    HAS_OHM = True
-except Exception:
-    _WMI = None
-    HAS_OHM = False
+import datetime as dt
+import json
+import re
+from pathlib import Path
 
 
-# ── Yardimcilar ──────────────────────────────────────────────────────────────
+BASE_DIR = Path(__file__).resolve().parent.parent
+HEALTH_FILE = BASE_DIR / "memory" / "health.json"
 
-def _normalize_query(text: str) -> str:
-    text = (text or "").strip().lower()
-    return (
-        text.replace("ı", "i").replace("ğ", "g").replace("ü", "u")
-            .replace("ş", "s").replace("ö", "o").replace("ç", "c")
-    )
+WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+MONTHS = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 
 
-def _uptime_str() -> str:
-    if not HAS_PSUTIL:
-        return "—"
-    secs = time.time() - psutil.boot_time()
-    mins, _ = divmod(int(secs), 60)
-    hrs, mins = divmod(mins, 60)
-    days, hrs = divmod(hrs, 24)
-    if days:
-        return f"{days} gün {hrs} saat"
-    if hrs:
-        return f"{hrs} saat {mins} dk"
-    return f"{mins} dk"
-
-
-def _battery() -> dict:
-    if not HAS_PSUTIL:
+def _load_health() -> dict:
+    if not HEALTH_FILE.exists():
         return {}
-    bat = psutil.sensors_battery()
-    if not bat:
-        return {}
-    out = {"percent": float(bat.percent), "plugged": bool(bat.power_plugged)}
-    if bat.secsleft and bat.secsleft > 0 and bat.secsleft != psutil.POWER_TIME_UNLIMITED:
-        out["minutes_left"] = int(bat.secsleft / 60)
-    return out
-
-
-def _cpu() -> dict:
-    if not HAS_PSUTIL:
-        return {}
-    pct = psutil.cpu_percent(interval=0.3)
-    freq = psutil.cpu_freq()
-    return {
-        "percent": pct,
-        "cores": psutil.cpu_count(logical=True) or 0,
-        "freq_ghz": (freq.current / 1000.0) if freq and freq.current else None,
-    }
-
-
-def _ram() -> dict:
-    if not HAS_PSUTIL:
-        return {}
-    m = psutil.virtual_memory()
-    return {
-        "percent": m.percent,
-        "used_gb": m.used / (1024 ** 3),
-        "total_gb": m.total / (1024 ** 3),
-    }
-
-
-def _disk() -> dict:
     try:
-        u = shutil.disk_usage("C:\\")
+        return json.loads(HEALTH_FILE.read_text(encoding="utf-8"))
     except Exception:
         return {}
-    return {
-        "percent": (u.used / u.total) * 100 if u.total else 0,
-        "used_gb": u.used / (1024 ** 3),
-        "total_gb": u.total / (1024 ** 3),
-        "free_gb": u.free / (1024 ** 3),
-    }
 
 
-def _temps() -> dict:
-    """OpenHardwareMonitor varsa CPU/GPU sicakliklarini doner."""
-    out = {}
-    if HAS_OHM and _WMI is not None:
+def _save_health(data: dict) -> None:
+    HEALTH_FILE.parent.mkdir(parents=True, exist_ok=True)
+    HEALTH_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _day_label(when: dt.datetime, now: dt.datetime) -> str:
+    today = now.date()
+    target = when.date()
+    if target == today:
+        return "today"
+    if target == today + dt.timedelta(days=1):
+        return "tomorrow"
+    return f"{when.day} {MONTHS[when.month]} {WEEKDAYS[when.weekday()]}"
+
+
+def _parse_iso(value: str) -> dt.datetime | None:
+    raw = (value or "").strip()
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = raw.replace("Z", "+00:00")
+    for fmt in (
+        "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M",
+        "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M",
+        "%d.%m.%Y %H:%M", "%Y-%m-%d", "%d.%m.%Y",
+    ):
         try:
-            for sensor in _WMI.Sensor():
-                if sensor.SensorType != "Temperature":
-                    continue
-                name = (sensor.Name or "").lower()
-                if "cpu" in name and "cpu" not in out:
-                    out["cpu_c"] = float(sensor.Value)
-                elif ("gpu" in name) and "gpu" not in out:
-                    out["gpu_c"] = float(sensor.Value)
-        except Exception:
-            pass
-
-    if HAS_PSUTIL and not out:
-        try:
-            temps = psutil.sensors_temperatures()  # Windows: cogu zaman bos
-        except Exception:
-            temps = {}
-        if temps:
-            for label, entries in temps.items():
-                for e in entries:
-                    if e.current and "cpu_c" not in out and "cpu" in label.lower():
-                        out["cpu_c"] = float(e.current)
-                    if e.current and "gpu_c" not in out and "gpu" in label.lower():
-                        out["gpu_c"] = float(e.current)
-    return out
-
-
-def _net() -> dict:
-    if not HAS_PSUTIL:
-        return {}
+            return dt.datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
     try:
-        c = psutil.net_io_counters()
+        return dt.datetime.fromisoformat(raw)
     except Exception:
-        return {}
-    return {
-        "sent_mb": c.bytes_sent / (1024 ** 2),
-        "recv_mb": c.bytes_recv / (1024 ** 2),
-    }
+        return None
 
 
-def _processes() -> int:
-    if not HAS_PSUTIL:
-        return 0
-    try:
-        return len(psutil.pids())
-    except Exception:
-        return 0
+def _parse_iso_ts(value: str) -> int:
+    parsed = _parse_iso(value)
+    if parsed:
+        return int(parsed.timestamp())
+    return 0
 
 
-def _collect() -> dict:
-    return {
-        "uptime": _uptime_str(),
-        "battery": _battery(),
-        "cpu": _cpu(),
-        "ram": _ram(),
-        "disk": _disk(),
-        "temps": _temps(),
-        "net": _net(),
-        "procs": _processes(),
-        "host": platform.node(),
-        "os": f"{platform.system()} {platform.release()}",
-        "ts": time.time(),
-    }
+def _format_ts(ts: int) -> str:
+    if ts <= 0:
+        return "no date set"
+    return dt.datetime.fromtimestamp(ts).strftime("%d %B %Y")
 
 
-def _age_str(ts: float) -> str:
-    return "az önce" if (time.time() - ts) < 60 else f"{int((time.time()-ts)/60)} dk önce"
+def _format_ts_short(ts: int) -> str:
+    if ts <= 0:
+        return ""
+    return dt.datetime.fromtimestamp(ts).strftime("%d %B %Y")
 
 
-# ── Formatlayicilar ──────────────────────────────────────────────────────────
-
-def _fmt_pct(v) -> str:
-    return f"{v:.0f}%" if isinstance(v, (int, float)) else "—"
-
-
-def _fmt_battery(b: dict) -> str:
-    if not b:
-        return "Pil: bu makinede algılanmadı (masaüstü olabilir)"
-    parts = [f"Pil: {_fmt_pct(b.get('percent'))}"]
-    parts.append("şarjda" if b.get("plugged") else "pilde")
-    if "minutes_left" in b:
-        m = b["minutes_left"]
-        parts.append(f"~{m//60} sa {m%60} dk kaldı" if m >= 60 else f"~{m} dk kaldı")
-    return ", ".join(parts)
+def _format_ts_relative(ts: int, now: dt.datetime) -> str:
+    if ts <= 0:
+        return "no date set"
+    when = dt.datetime.fromtimestamp(ts)
+    return _day_label(when, now)
 
 
-def _fmt_cpu(c: dict) -> str:
-    if not c:
-        return "CPU: —"
-    out = f"CPU: {_fmt_pct(c.get('percent'))} ({c.get('cores')} çekirdek"
-    if c.get("freq_ghz"):
-        out += f", {c['freq_ghz']:.1f} GHz"
-    return out + ")"
+# ── Water tracking ──────────────────────────────────────────────────────────
+
+def log_water(amount_ml: int = 250) -> str:
+    if amount_ml <= 0:
+        return "Water amount must be greater than 0."
+    data = _load_health()
+    today = dt.date.today().isoformat()
+    water = data.setdefault("water", {})
+    water[today] = water.get(today, 0) + amount_ml
+    _save_health(data)
+    total = water[today]
+    return f"Logged {amount_ml} ml of water. Total today: {total} ml."
 
 
-def _fmt_ram(r: dict) -> str:
-    if not r:
-        return "RAM: —"
-    return f"RAM: {_fmt_pct(r.get('percent'))} ({r['used_gb']:.1f} / {r['total_gb']:.1f} GB)"
-
-
-def _fmt_disk(d: dict) -> str:
-    if not d:
-        return "Disk C:: —"
-    return f"Disk C:: {_fmt_pct(d.get('percent'))} dolu, {d['free_gb']:.1f} GB boş"
-
-
-def _fmt_temps(t: dict) -> str:
-    if not t:
-        return "Sıcaklık: sensör yok (OpenHardwareMonitor önerilir)"
-    parts = []
-    if "cpu_c" in t:
-        parts.append(f"CPU {t['cpu_c']:.0f}°C")
-    if "gpu_c" in t:
-        parts.append(f"GPU {t['gpu_c']:.0f}°C")
-    return "Sıcaklık: " + ", ".join(parts) if parts else "Sıcaklık: —"
-
-
-def _fmt_net(n: dict) -> str:
-    if not n:
-        return "Ağ: —"
-    return f"Ağ trafiği: ↑{n['sent_mb']:.0f} MB  ↓{n['recv_mb']:.0f} MB"
-
-
-# ── Ana fonksiyonlar ─────────────────────────────────────────────────────────
-
-def get_health_data(query: str = "all") -> str:
-    """
-    Sistem sagligini Turkce ozet olarak doner.
-
-    Sorgu anahtar kelimeleri:
-      - "pil" / "battery"        → sadece pil
-      - "cpu" / "islemci"        → sadece CPU
-      - "ram" / "bellek"         → sadece RAM
-      - "disk"                   → sadece disk
-      - "sicaklik" / "isi"       → sadece sicaklik
-      - "ag" / "network"         → sadece ag
-      - "uptime" / "calisma"     → sadece uptime
-      - "analiz" / "detay"       → detayli analiz
-      - varsayilan / "all"       → tum vitals kart formatinda
-    """
-    if not HAS_PSUTIL:
-        return "Sistem sağlığı okunamadı: psutil kurulu değil. `pip install psutil` ile kur."
-
-    q = _normalize_query(query)
-    data = _collect()
-    age = _age_str(data["ts"])
-
-    if any(k in q for k in ("pil", "battery", "sarj", "sarjda")):
-        return f"{_fmt_battery(data['battery'])}\n[güncelleme: {age}]"
-
-    if any(k in q for k in ("cpu", "islemci", "yuk", "load")):
-        return f"{_fmt_cpu(data['cpu'])}\n[güncelleme: {age}]"
-
-    if any(k in q for k in ("ram", "bellek", "memory")):
-        return f"{_fmt_ram(data['ram'])}\n[güncelleme: {age}]"
-
-    if any(k in q for k in ("disk", "depolama", "storage")):
-        return f"{_fmt_disk(data['disk'])}\n[güncelleme: {age}]"
-
-    if any(k in q for k in ("sicaklik", "isi", "temp", "fan", "soguma")):
-        return f"{_fmt_temps(data['temps'])}\n[güncelleme: {age}]"
-
-    if any(k in q for k in ("ag", "network", "internet", "wifi", "trafik")):
-        return f"{_fmt_net(data['net'])}\n[güncelleme: {age}]"
-
-    if any(k in q for k in ("uptime", "calisma suresi", "calisma", "acik kalma")):
-        return f"Sistem {data['uptime']} açık.\n[güncelleme: {age}]"
-
-    if any(k in q for k in ("analiz", "detay", "rapor", "ozet detayli")):
-        return _build_analysis(data, age)
-
-    # Varsayilan: kart formatinda tam vitals
-    return "\n".join([
-        "── SİSTEM SAĞLIĞI ─────────────────",
-        f"🖥  {data['host']} — {data['os']}",
-        f"⏱  Uptime        : {data['uptime']}",
-        f"🔋 {_fmt_battery(data['battery'])}",
-        f"⚙  {_fmt_cpu(data['cpu'])}",
-        f"🧠 {_fmt_ram(data['ram'])}",
-        f"💾 {_fmt_disk(data['disk'])}",
-        f"🌡  {_fmt_temps(data['temps'])}",
-        f"🌐 {_fmt_net(data['net'])}",
-        f"🧩 Süreç sayısı   : {data['procs']}",
-        "──────────────────────────────────",
-        f"[güncelleme: {age}]",
-    ])
-
-
-def _build_analysis(data: dict, age: str) -> str:
-    cpu = data["cpu"].get("percent") or 0
-    ram = data["ram"].get("percent") or 0
-    disk = data["disk"].get("percent") or 0
-    bat = data["battery"]
-
-    lines = ["Sistem analizi hazır."]
-
-    if cpu >= 85:
-        lines.append(f"CPU yükü yüksek (%{cpu:.0f}) — arka planda ağır iş var.")
-    elif cpu >= 50:
-        lines.append(f"CPU orta yükte (%{cpu:.0f}).")
-    else:
-        lines.append(f"CPU rahat (%{cpu:.0f}).")
-
-    if ram >= 85:
-        lines.append(f"RAM dolmak üzere (%{ram:.0f}) — gereksiz uygulamaları kapatmak iyi olur.")
-    elif ram >= 65:
-        lines.append(f"RAM orta seviyede (%{ram:.0f}).")
-    else:
-        lines.append(f"RAM bol (%{ram:.0f}).")
-
-    if disk >= 90:
-        lines.append(f"Disk C: kritik dolulukta (%{disk:.0f}).")
-    elif disk >= 75:
-        lines.append(f"Disk C: %{disk:.0f} dolu — temizlik mantıklı.")
-
-    if bat:
-        if not bat.get("plugged") and bat.get("percent", 100) <= 20:
-            lines.append("Pil düşük ve şarjda değil — şarja takmanı öneririm.")
-        elif bat.get("plugged"):
-            lines.append(f"Pil şarjda (%{bat.get('percent', 0):.0f}).")
-
-    temps = data["temps"]
-    if temps.get("cpu_c", 0) >= 85:
-        lines.append(f"CPU sıcak: {temps['cpu_c']:.0f}°C — havalandırmayı kontrol et.")
-    if temps.get("gpu_c", 0) >= 85:
-        lines.append(f"GPU sıcak: {temps['gpu_c']:.0f}°C.")
-
-    lines.append(f"Uptime: {data['uptime']}, süreç sayısı: {data['procs']}.")
-    lines.append(f"[güncelleme: {age}]")
+def get_water_summary() -> str:
+    data = _load_health()
+    water = data.get("water", {})
+    if not water:
+        return "No water intake data recorded yet."
+    today = dt.date.today().isoformat()
+    today_amount = water.get(today, 0)
+    recent = sorted(water.items(), reverse=True)[:7]
+    lines = [f"Water intake today: {today_amount} ml."]
+    if len(recent) > 1:
+        lines.append("Recent days:")
+        for date_str, amount in recent:
+            lines.append(f"  {date_str}: {amount} ml")
     return "\n".join(lines)
 
 
-def get_health_card_lines() -> list[str]:
-    """UI sol panelindeki dar HEALTH karti icin kisa, tek-satirlik vitals."""
-    if not HAS_PSUTIL:
-        return ["psutil yok"]
-    data = _collect()
-    lines: list[str] = []
+# ── Step tracking ───────────────────────────────────────────────────────────
 
-    cpu = data["cpu"].get("percent")
-    if cpu is not None:
-        lines.append(f"CPU %{cpu:.0f}")
-
-    ram = data["ram"]
-    if ram:
-        lines.append(f"RAM %{ram.get('percent', 0):.0f} ({ram.get('used_gb', 0):.1f}G)")
-
-    disk = data["disk"]
-    if disk:
-        lines.append(f"Disk %{disk.get('percent', 0):.0f}, {disk.get('free_gb', 0):.0f}G boş")
-
-    bat = data["battery"]
-    if bat:
-        tag = "şarjda" if bat.get("plugged") else "pilde"
-        lines.append(f"Pil %{bat.get('percent', 0):.0f} {tag}")
-
-    temps = data["temps"]
-    if temps.get("cpu_c"):
-        t = f"CPU {temps['cpu_c']:.0f}°C"
-        if temps.get("gpu_c"):
-            t += f" / GPU {temps['gpu_c']:.0f}°C"
-        lines.append(t)
-    elif data["uptime"] != "—":
-        lines.append(f"Uptime {data['uptime']}")
-
-    return lines[:5] or ["Veri yok"]
+def log_steps(count: int = 1000) -> str:
+    if count <= 0:
+        return "Step count must be greater than 0."
+    data = _load_health()
+    today = dt.date.today().isoformat()
+    steps = data.setdefault("steps", {})
+    steps[today] = steps.get(today, 0) + count
+    _save_health(data)
+    total = steps[today]
+    return f"Logged {count} steps. Total today: {total} steps."
 
 
-def get_welcome_health_summary() -> str:
-    """Acilis ekraninda okunan kisa, dogal Turkce ozet."""
-    if not HAS_PSUTIL:
-        return "Sistem sağlığı şu anda alınamadı."
+def get_step_summary() -> str:
+    data = _load_health()
+    steps = data.get("steps", {})
+    if not steps:
+        return "No step data recorded yet."
+    today = dt.date.today().isoformat()
+    today_amount = steps.get(today, 0)
+    recent = sorted(steps.items(), reverse=True)[:7]
+    lines = [f"Steps today: {today_amount}."]
+    if len(recent) > 1:
+        lines.append("Recent days:")
+        for date_str, amount in recent:
+            lines.append(f"  {date_str}: {amount} steps")
+    return "\n".join(lines)
 
-    data = _collect()
+
+# ── Sleep tracking ──────────────────────────────────────────────────────────
+
+def log_sleep(hours: float = 8.0) -> str:
+    if hours <= 0 or hours > 24:
+        return "Sleep duration must be between 0 and 24 hours."
+    data = _load_health()
+    today = dt.date.today().isoformat()
+    sleep = data.setdefault("sleep", {})
+    sleep[today] = sleep.get(today, 0) + hours
+    _save_health(data)
+    total = sleep[today]
+    return f"Logged {hours} hours of sleep. Total today: {total} hours."
+
+
+def get_sleep_summary() -> str:
+    data = _load_health()
+    sleep = data.get("sleep", {})
+    if not sleep:
+        return "No sleep data recorded yet."
+    today = dt.date.today().isoformat()
+    today_amount = sleep.get(today, 0)
+    recent = sorted(sleep.items(), reverse=True)[:7]
+    lines = [f"Sleep today: {today_amount} hours."]
+    if len(recent) > 1:
+        lines.append("Recent days:")
+        for date_str, amount in recent:
+            lines.append(f"  {date_str}: {amount} hours")
+    return "\n".join(lines)
+
+
+# ── Weight tracking ─────────────────────────────────────────────────────────
+
+def log_weight(kg: float) -> str:
+    if kg <= 0 or kg > 500:
+        return "Weight must be between 0 and 500 kg."
+    data = _load_health()
+    today = dt.date.today().isoformat()
+    weight = data.setdefault("weight", {})
+    weight[today] = kg
+    _save_health(data)
+    return f"Weight logged: {kg} kg ({today})."
+
+
+def get_weight_summary() -> str:
+    data = _load_health()
+    weight = data.get("weight", {})
+    if not weight:
+        return "No weight data recorded yet."
+    recent = sorted(weight.items(), reverse=True)[:7]
+    lines = ["Weight records:"]
+    for date_str, kg in recent:
+        lines.append(f"  {date_str}: {kg} kg")
+    return "\n".join(lines)
+
+
+# ── Medication reminders ────────────────────────────────────────────────────
+
+def add_medication(name: str, dosage: str = "", schedule: str = "", notes: str = "") -> str:
+    if not name or not name.strip():
+        return "Medication name is required."
+    data = _load_health()
+    meds = data.setdefault("medications", [])
+    entry = {
+        "name": name.strip(),
+        "dosage": dosage.strip(),
+        "schedule": schedule.strip(),
+        "notes": notes.strip(),
+        "created_at": dt.datetime.now().isoformat(),
+    }
+    meds.append(entry)
+    _save_health(data)
+    return f"Medication added: {name.strip()}."
+
+
+def get_medications() -> str:
+    data = _load_health()
+    meds = data.get("medications", [])
+    if not meds:
+        return "No medications recorded."
+    lines = ["Medications:"]
+    for med in meds:
+        parts = [med.get("name", "Unnamed")]
+        if med.get("dosage"):
+            parts.append(f"({med['dosage']})")
+        if med.get("schedule"):
+            parts.append(f"- {med['schedule']}")
+        lines.append("  " + " ".join(parts))
+    return "\n".join(lines)
+
+
+# ── General health summary ──────────────────────────────────────────────────
+
+def get_health_summary() -> str:
+    data = _load_health()
     parts = []
 
-    bat = data["battery"]
-    if bat:
-        state = "şarjda" if bat.get("plugged") else "pilde"
-        parts.append(f"pil {state} %{bat.get('percent', 0):.0f}")
+    water = data.get("water", {})
+    if water:
+        today = dt.date.today().isoformat()
+        parts.append(f"Water: {water.get(today, 0)} ml today.")
 
-    cpu_pct = data["cpu"].get("percent")
-    if cpu_pct is not None:
-        parts.append(f"CPU %{cpu_pct:.0f}")
+    steps = data.get("steps", {})
+    if steps:
+        today = dt.date.today().isoformat()
+        parts.append(f"Steps: {steps.get(today, 0)} today.")
 
-    ram_pct = data["ram"].get("percent")
-    if ram_pct is not None:
-        parts.append(f"RAM %{ram_pct:.0f}")
+    sleep = data.get("sleep", {})
+    if sleep:
+        today = dt.date.today().isoformat()
+        parts.append(f"Sleep: {sleep.get(today, 0)} hours today.")
 
-    if data["uptime"] != "—":
-        parts.append(f"sistem {data['uptime']} açık")
+    weight = data.get("weight", {})
+    if weight:
+        recent = sorted(weight.items(), reverse=True)
+        latest_date, latest_kg = recent[0]
+        parts.append(f"Weight: {latest_kg} kg ({latest_date}).")
+
+    meds = data.get("medications", [])
+    if meds:
+        parts.append(f"Medications: {len(meds)} recorded.")
 
     if not parts:
-        return "Sistem sağlığı şu anda alınamadı."
+        return "No health data recorded yet. Log water, steps, sleep, weight, or medications."
 
-    if len(parts) == 1:
-        return parts[0].capitalize() + "."
-    return ", ".join(parts[:-1]).capitalize() + f" ve {parts[-1]}."
+    return "Health summary:\n" + "\n".join(parts)
+
+
+def get_health_card_lines() -> list[str]:
+    """Return a short list of health summary lines for the UI health card."""
+    data = _load_health()
+    lines = []
+
+    water = data.get("water", {})
+    if water:
+        today = dt.date.today().isoformat()
+        lines.append(f"Water: {water.get(today, 0)} ml today")
+
+    steps = data.get("steps", {})
+    if steps:
+        today = dt.date.today().isoformat()
+        lines.append(f"Steps: {steps.get(today, 0)} today")
+
+    sleep = data.get("sleep", {})
+    if sleep:
+        today = dt.date.today().isoformat()
+        lines.append(f"Sleep: {sleep.get(today, 0)} hrs today")
+
+    weight = data.get("weight", {})
+    if weight:
+        recent = sorted(weight.items(), reverse=True)
+        latest_date, latest_kg = recent[0]
+        lines.append(f"Weight: {latest_kg} kg")
+
+    meds = data.get("medications", [])
+    if meds:
+        lines.append(f"Medications: {len(meds)}")
+
+    if not lines:
+        lines.append("No health data yet")
+
+    return lines

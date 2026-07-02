@@ -1,10 +1,10 @@
 """
-Basit hava durumu ozeti — uzaktaki bir servis uzerinden calisir.
+Simple weather summary — works through a remote service.
 https://github.com/bnsware
 
-Varsayilan konum:
-- JARVIS_WEATHER_LOCATION env varsa onu kullanir
-- yoksa Hatay varsayilir
+Default location:
+- Uses JARVIS_WEATHER_LOCATION env var if set
+- Otherwise defaults to Hatay
 """
 
 from __future__ import annotations
@@ -33,17 +33,17 @@ def get_weather_summary(location: str | None = None) -> str:
 
         parts = []
         if temp_c:
-            parts.append(f"{temp_c} derece")
+            parts.append(f"{temp_c} degrees")
         if weather_desc:
             parts.append(weather_desc.lower())
         if feels_like and feels_like != temp_c:
-            parts.append(f"hissedilen {feels_like} derece")
+            parts.append(f"feels like {feels_like} degrees")
         if humidity:
-            parts.append(f"nem yüzde {humidity}")
+            parts.append(f"humidity {humidity}%")
 
         if not parts:
-            return "Hava durumu bilgisi şu anda alınamadı."
+            return "Weather information is currently unavailable."
 
-        return f"{target} için hava durumu: " + ", ".join(parts) + "."
+        return f"Weather for {target}: " + ", ".join(parts) + "."
     except Exception:
-        return "Hava durumu bilgisi şu anda alınamadı."
+        return "Weather information is currently unavailable."

@@ -15,14 +15,15 @@ DEFAULT_CONFIG = {
     "voice": "Charon",
     "youtube_api_key": "",
     "youtube_channel_handle": "",
-    # Yerel mod ayarlari
-    "backend": "gemini",  # "gemini" veya "lmstudio"
+    # Local model settings
+    "backend": "gemini",  # "gemini" or "lmstudio"
     "lmstudio_base_url": "http://127.0.0.1:1234/v1",
     "lmstudio_model": "local-model",
-    "lmstudio_vision_model": "",  # bos ise lmstudio_model kullanilir
+    "lmstudio_vision_model": "",  # if empty, lmstudio_model is used
     "lmstudio_api_key": "lm-studio",
     "stt_engine": "whisper",  # "whisper" | "google"
-    "stt_language": "tr-TR",
+    "stt_language": "en-GB",
+    "primary_color": "#00d4c0",
 }
 
 
@@ -70,7 +71,7 @@ def is_local_backend() -> bool:
 
 
 def has_runtime_credentials() -> bool:
-    """JARVIS calistirilabilir mi? Yerel modda her zaman True."""
+    """Can JARVIS run? Always True in local mode."""
     if is_local_backend():
         return True
     return has_gemini_api_key()

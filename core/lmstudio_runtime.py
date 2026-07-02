@@ -1,15 +1,15 @@
 """
-LM Studio (yerel) runtime — Gemini Live yerine OpenAI-uyumlu yerel modeli kullanir.
+LM Studio (local) runtime — uses an OpenAI-compatible local model instead of Gemini Live.
 
-Akis:
-  Mikrofon -> SpeechRecognition (Whisper veya Google) -> metin
+Flow:
+  Microphone -> SpeechRecognition (Whisper or Google) -> text
         -> LM Studio /v1/chat/completions (tool calling)
-        -> Tool sonuclari geri besleme -> nihai metin
+        -> Tool results feedback -> final text
         -> Windows SAPI TTS (actions.tts.speak_text)
 
-JarvisLocal sinifinin arayuzu JarvisLive ile uyumludur: ui.on_text_command,
-ui.on_pause_toggle vb. callback'leri ayni kullanir, asyncio.run(jarvis.run())
-ile baslatilir.
+JarvisLocal class interface is compatible with JarvisLive: uses the same
+ui.on_text_command, ui.on_pause_toggle etc. callbacks, started with
+asyncio.run(jarvis.run()).
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ from actions.tts import speak_text
 
 def _save_memory_tool(category: str, key: str, value: str) -> str:
     if not key or not value:
-        return "Eksik parametre."
+        return "Missing parameter."
     update_memory({category or "notes": {key: {"value": value}}})
     return "ok"
 
@@ -71,7 +71,7 @@ TOOL_HANDLERS: dict[str, Callable[..., Any]] = {
     "shell_run": lambda command="": shell_run(command),
     "play_media": lambda query="", provider="auto", autoplay=True: play_media(query, provider, bool(autoplay)),
     "get_youtube_channel_report": lambda query="overview", handle="", video_limit=6: get_youtube_channel_report(query, handle, int(video_limit or 6)),
-    "analyze_screen": lambda query="Ekranda ne var?", target="active_window": analyze_screen(query, target),
+    "analyze_screen": lambda query="What's on the screen?", target="active_window": analyze_screen(query, target),
     "save_memory": lambda category="notes", key="", value="": _save_memory_tool(category, key, value),
     "delete_memory": lambda category="", key="", match_text="": delete_memory(category, key, match_text),
     "send_whatsapp_message": lambda message="", phone_number="", recipient_name="", send_now=False, app_target="auto": send_whatsapp_message(message, phone_number, recipient_name, bool(send_now), app_target),
@@ -80,7 +80,7 @@ TOOL_HANDLERS: dict[str, Callable[..., Any]] = {
 
 
 def _gemini_tool_to_openai(decl: dict) -> dict:
-    """Gemini tool deklarasyonunu OpenAI tool spec'ine cevirir."""
+    """Converts a Gemini tool declaration to OpenAI tool spec."""
     name = decl["name"]
     description = decl.get("description", "")
     params = decl.get("parameters", {"type": "OBJECT", "properties": {}})
@@ -113,7 +113,7 @@ def _gemini_tool_to_openai(decl: dict) -> dict:
 # ── STT ──────────────────────────────────────────────────────────────────────
 
 class _SttEngine:
-    def __init__(self, language: str = "tr-TR", engine: str = "whisper"):
+    def __init__(self, language: str = "en-GB", engine: str = "whisper"):
         self.language = language
         self.engine = (engine or "whisper").lower()
         self._sr = None
@@ -127,7 +127,7 @@ class _SttEngine:
         try:
             import speech_recognition as sr  # type: ignore
         except Exception as exc:
-            self._init_error = f"SpeechRecognition kurulu degil: {exc}"
+            self._init_error = f"SpeechRecognition not installed: {exc}"
             return
         self._sr = sr
         try:
@@ -139,11 +139,11 @@ class _SttEngine:
                 self._recognizer.adjust_for_ambient_noise(source, duration=0.6)
             self._init_ok = True
         except Exception as exc:
-            self._init_error = f"Mikrofon hazirlanamadi: {exc}"
+            self._init_error = f"Microphone could not be initialized: {exc}"
 
     def listen_once(self, phrase_time_limit: float = 12.0, timeout: float = 6.0) -> tuple[bool, str]:
         if not self._init_ok:
-            return False, self._init_error or "STT hazir degil."
+            return False, self._init_error or "STT not ready."
         sr = self._sr
         try:
             with self._mic as source:
@@ -151,11 +151,11 @@ class _SttEngine:
         except sr.WaitTimeoutError:
             return False, "timeout"
         except Exception as exc:
-            return False, f"Dinleme hatasi: {exc}"
+            return False, f"Listening error: {exc}"
 
         try:
             if self.engine == "whisper":
-                lang = (self.language or "tr").split("-")[0].lower()
+                lang = (self.language or "en").split("-")[0].lower()
                 text = self._recognizer.recognize_whisper(audio, language=lang)
             else:
                 text = self._recognizer.recognize_google(audio, language=self.language)
@@ -163,14 +163,14 @@ class _SttEngine:
         except sr.UnknownValueError:
             return False, ""
         except Exception as exc:
-            # Whisper kurulu degilse Google'a dus
+            # Fall back to Google if Whisper is not installed
             if self.engine == "whisper":
                 try:
                     text = self._recognizer.recognize_google(audio, language=self.language)
                     return True, (text or "").strip()
                 except Exception as exc2:
-                    return False, f"Transkripsiyon hatasi: {exc2}"
-            return False, f"Transkripsiyon hatasi: {exc}"
+                    return False, f"Transcription error: {exc2}"
+            return False, f"Transcription error: {exc}"
 
 
 # ── JarvisLocal ──────────────────────────────────────────────────────────────
@@ -200,7 +200,7 @@ class JarvisLocal:
     def _on_text_command(self, text: str):
         if self._paused or not text.strip():
             return
-        self.ui.write_log(f"Siz: {text}")
+        self.ui.write_log(f"You: {text}")
         if self._loop and self._pending_text_queue is not None:
             asyncio.run_coroutine_threadsafe(self._pending_text_queue.put(text.strip()), self._loop)
 
@@ -215,14 +215,14 @@ class JarvisLocal:
         mem_str = format_memory_for_prompt(memory)
         sys_p = self._load_system_prompt()
         now = dt.datetime.now()
-        time_ctx = f"[SU ANKI ZAMAN]\n{now.strftime('%A, %d %B %Y - %H:%M')}\n\n"
+        time_ctx = f"[CURRENT TIME]\n{now.strftime('%A, %d %B %Y - %H:%M')}\n\n"
         parts = [time_ctx]
         if mem_str:
             parts.append(mem_str + "\n\n")
         parts.append(sys_p)
         parts.append(
-            "\n\nNot: Yerel modda calisiyorsun (LM Studio). Kullaniciya kisa, net "
-            "Turkce yanitlar ver. Gerektiginde tool cagirisi yap."
+            "\n\nNote: You are running in local mode (LM Studio). Give the user short, "
+            "clear responses in English. Make tool calls when needed."
         )
         return "\n".join(parts)
 
@@ -240,7 +240,7 @@ class JarvisLocal:
         tail = self._messages[-self._max_history:]
         self._messages = head + tail
 
-    # ── LM Studio cagrisi ────────────────────────────────────────────────────
+    # ── LM Studio call ───────────────────────────────────────────────────────
     def _chat_completion(self) -> dict:
         base = str(get_app_config_value("lmstudio_base_url", "http://127.0.0.1:1234/v1") or "").rstrip("/")
         model = str(get_app_config_value("lmstudio_model", "local-model") or "local-model")
@@ -276,28 +276,28 @@ class JarvisLocal:
             args = {}
         handler = TOOL_HANDLERS.get(name)
         if handler is None:
-            return f"Bilinmeyen arac: {name}"
+            return f"Unknown tool: {name}"
         try:
             self.ui.set_state("THINKING")
             result = handler(**args)
             return str(result if result is not None else "ok")
         except Exception as exc:
             traceback.print_exc()
-            return f"Hata: {exc}"
+            return f"Error: {exc}"
 
     async def _handle_turn(self, user_text: str):
         self._ensure_system_message()
         self._messages.append({"role": "user", "content": user_text})
         self.ui.set_state("THINKING")
 
-        for _ in range(6):  # max tool-call zinciri
+        for _ in range(6):  # max tool-call chain
             loop = asyncio.get_event_loop()
             try:
                 data = await loop.run_in_executor(None, self._chat_completion)
             except Exception as exc:
-                self.ui.write_log(f"ERR: LM Studio cevap vermedi - {exc}")
+                self.ui.write_log(f"ERR: LM Studio did not respond - {exc}")
                 self.ui.set_state("ERROR")
-                # Kullaniciyi mesaj listesinden cikar ki tekrar denesin
+                # Remove user message so they can retry
                 self._messages.pop()
                 return
 
@@ -307,7 +307,7 @@ class JarvisLocal:
             content = (msg.get("content") or "").strip()
 
             if tool_calls:
-                # Asistan mesajini ekle (tool_calls ile)
+                # Add assistant message (with tool_calls)
                 self._messages.append({
                     "role": "assistant",
                     "content": content or None,
@@ -325,21 +325,21 @@ class JarvisLocal:
                         "name": name,
                         "content": result,
                     })
-                # Tool sonuclariyla modeli tekrar cagir
+                # Call model again with tool results
                 continue
 
-            # Tool cagirisi yok — nihai yanit
+            # No tool calls — final response
             if content:
                 self._messages.append({"role": "assistant", "content": content})
                 self.ui.write_log(f"JARVIS: {content}")
                 self._speak_blocking(content)
             else:
-                self.ui.write_log("JARVIS: (bos yanit)")
+                self.ui.write_log("JARVIS: (empty response)")
             self._trim_history()
             self.ui.set_state("LISTENING")
             return
 
-        self.ui.write_log("ERR: Tool cagri zinciri uzun, durduruldu.")
+        self.ui.write_log("ERR: Tool call chain too long, stopped.")
         self.ui.set_state("ERROR")
 
     def _speak_blocking(self, text: str):
@@ -358,7 +358,7 @@ class JarvisLocal:
         except Exception:
             self.set_speaking(False)
 
-    # ── STT dinleme dongusu ──────────────────────────────────────────────────
+    # ── STT listening loop ───────────────────────────────────────────────────
     def _stt_loop_thread(self, stt: _SttEngine, queue: asyncio.Queue, loop: asyncio.AbstractEventLoop, stop_event: threading.Event):
         while not stop_event.is_set():
             if self._paused or self.ui.muted:
@@ -375,22 +375,22 @@ class JarvisLocal:
                 continue
             if not text:
                 continue
-            self.ui.write_log(f"Siz: {text}")
+            self.ui.write_log(f"You: {text}")
             asyncio.run_coroutine_threadsafe(queue.put(text), loop)
 
-    # ── Ana dongu ────────────────────────────────────────────────────────────
+    # ── Main loop ────────────────────────────────────────────────────────────
     async def run(self):
         self._loop = asyncio.get_event_loop()
         self._pending_text_queue = asyncio.Queue()
-        self.ui.write_log("SYS: Yerel mod (LM Studio) baslatildi.")
+        self.ui.write_log("SYS: Local mode (LM Studio) started.")
         self.ui.set_state("LISTENING")
 
-        # STT'yi arkaplanda baslat
-        language = str(get_app_config_value("stt_language", "tr-TR") or "tr-TR")
+        # Start STT in background
+        language = str(get_app_config_value("stt_language", "en-GB") or "en-GB")
         engine = str(get_app_config_value("stt_engine", "whisper") or "whisper")
         stt = _SttEngine(language=language, engine=engine)
         if not stt._init_ok:
-            self.ui.write_log(f"ERR: STT baslatilmadi — {stt._init_error}. Yine de yazi kutusunu kullanabilirsin.")
+            self.ui.write_log(f"ERR: STT not started — {stt._init_error}. You can still use the text input box.")
 
         stop_event = threading.Event()
         if stt._init_ok:
@@ -414,7 +414,7 @@ class JarvisLocal:
                 try:
                     await self._handle_turn(text)
                 except Exception as exc:
-                    self.ui.write_log(f"ERR: Yerel mod hatasi — {exc}")
+                    self.ui.write_log(f"ERR: Local mode error — {exc}")
                     self.ui.set_state("ERROR")
                     traceback.print_exc()
         finally:
@@ -424,7 +424,7 @@ class JarvisLocal:
 # ── Connectivity test ────────────────────────────────────────────────────────
 
 def ping_lmstudio(base_url: str | None = None, timeout: float = 5.0) -> tuple[bool, str]:
-    """LM Studio sunucusuna bagliligi test eder."""
+    """Tests connectivity to the LM Studio server."""
     base = (base_url or str(get_app_config_value("lmstudio_base_url", "http://127.0.0.1:1234/v1") or "")).rstrip("/")
     try:
         resp = requests.get(f"{base}/models", timeout=timeout)

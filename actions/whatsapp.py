@@ -1,10 +1,10 @@
 """
-WhatsApp mesaj gonderme — Windows surumu.
+Send WhatsApp messages — Windows version.
 
-- WhatsApp Desktop URL scheme (whatsapp://send?phone=...&text=...) acar.
-- Otomatik gonderim icin pyautogui ile Enter tusu gonderir.
-- WhatsApp Web fallback olarak varsayilan tarayicida acilir.
-- Sik kullanilan kisiler kalici hafizaya kaydedilir.
+- Opens WhatsApp Desktop via URL scheme (whatsapp://send?phone=...&text=...).
+- Sends automatically with pyautogui Enter key press.
+- Falls back to WhatsApp Web in the default browser.
+- Frequently used contacts are saved to persistent memory.
 """
 
 from __future__ import annotations
@@ -34,8 +34,8 @@ def _normalize_phone(phone_number: str) -> str:
         digits = "90" + digits
     if len(digits) < 8 or len(digits) > 15:
         raise ValueError(
-            "Telefon numarasi uluslararasi formatta olmali. "
-            "Orn: +905551112233"
+            "Phone number must be in international format. "
+            "E.g.: +905551112233"
         )
     return digits
 
@@ -132,7 +132,7 @@ def _find_contact(recipient_name: str) -> dict | None:
 
 def save_whatsapp_contact(display_name: str, phone_number: str, aliases: str = "") -> str:
     if not display_name or not display_name.strip():
-        return "Kisi adi bos olamaz."
+        return "Contact name cannot be empty."
     try:
         normalized_phone = _normalize_phone(phone_number)
     except ValueError as exc:
@@ -153,8 +153,8 @@ def save_whatsapp_contact(display_name: str, phone_number: str, aliases: str = "
         }
     })
     if alias_list:
-        return f"{display_name.strip()} WhatsApp kisilerine kaydedildi. Takma adlar: {', '.join(alias_list)}"
-    return f"{display_name.strip()} WhatsApp kisilerine kaydedildi."
+        return f"{display_name.strip()} saved to WhatsApp contacts. Aliases: {', '.join(alias_list)}"
+    return f"{display_name.strip()} saved to WhatsApp contacts."
 
 
 def _unfold_vcf_lines(text: str) -> list[str]:
@@ -171,11 +171,11 @@ def _unfold_vcf_lines(text: str) -> list[str]:
 def import_phone_book_from_vcf(vcf_path: str) -> str:
     source = Path(vcf_path).expanduser()
     if not source.exists():
-        return f"Rehber dosyasi bulunamadi: {source}"
+        return f"Phone book file not found: {source}"
     try:
         text = source.read_text(encoding="utf-8", errors="ignore")
     except Exception as exc:
-        return f"Rehber dosyasi okunamadi: {exc}"
+        return f"Could not read phone book file: {exc}"
 
     entries = {}
     current_lines: list[str] = []
@@ -237,7 +237,7 @@ def import_phone_book_from_vcf(vcf_path: str) -> str:
     phone_book = _load_phone_book()
     phone_book.update(entries)
     _save_phone_book(phone_book)
-    return f"{imported} rehber kisisi ice aktarildi, {skipped} kayit atlandi."
+    return f"{imported} phone book contacts imported, {skipped} records skipped."
 
 
 def _open_uri(uri: str) -> tuple[bool, str]:
@@ -255,20 +255,20 @@ def _open_browser(url: str) -> tuple[bool, str]:
         os.startfile(url)
         return True, "default browser"
     except Exception as exc:
-        return False, f"Tarayici acilamadi: {exc}"
+        return False, f"Could not open browser: {exc}"
 
 
 def _auto_send_with_pyautogui() -> tuple[bool, str]:
     try:
         import pyautogui  # type: ignore
     except Exception as exc:
-        return False, f"pyautogui bulunamadi: {exc}"
+        return False, f"pyautogui not found: {exc}"
     try:
         time.sleep(AUTO_SEND_DELAY_SECONDS)
         pyautogui.press("enter")
         return True, "ok"
     except Exception as exc:
-        return False, f"pyautogui hatasi: {exc}"
+        return False, f"pyautogui error: {exc}"
 
 
 def _open_whatsapp_desktop(phone_number: str, message: str) -> tuple[bool, str]:
@@ -276,8 +276,8 @@ def _open_whatsapp_desktop(phone_number: str, message: str) -> tuple[bool, str]:
     url = f"whatsapp://send?phone={phone_number}&text={encoded}"
     ok, detail = _open_uri(url)
     if not ok:
-        return False, f"WhatsApp Desktop acilamadi: {detail}"
-    return True, "WhatsApp Desktop sohbeti acildi."
+        return False, f"Could not open WhatsApp Desktop: {detail}"
+    return True, "WhatsApp Desktop chat opened."
 
 
 def _open_whatsapp_web(phone_number: str, message: str) -> tuple[bool, str]:
@@ -294,7 +294,7 @@ def send_whatsapp_message(
     app_target: str = "auto",
 ) -> str:
     if not message or not message.strip():
-        return "Mesaj bos olamaz."
+        return "Message cannot be empty."
 
     app_target = (app_target or "auto").strip().lower()
     if app_target not in {"auto", "desktop", "web"}:
@@ -329,44 +329,44 @@ def send_whatsapp_message(
     if not normalized_phone:
         if resolved_name:
             return (
-                f"'{resolved_name}' icin kayitli bir telefon numarasi bulamadim. "
-                "Once kisiyi numarasiyla kaydet."
+                f"Could not find a saved phone number for '{resolved_name}'. "
+                "Save the contact with their number first."
             )
-        return "WhatsApp mesaji icin kisi adi veya telefon numarasi gerekli."
+        return "A contact name or phone number is required for WhatsApp messages."
 
-    source_note = " (rehberden bulundu)" if contact_source == "phone_book" else ""
+    source_note = " (found from phone book)" if contact_source == "phone_book" else ""
 
     if app_target in {"auto", "desktop"}:
         ok, detail = _open_whatsapp_desktop(normalized_phone, message)
         if ok:
             label = resolved_name or f"+{normalized_phone}"
             if not send_now:
-                return f"WhatsApp Desktop icinde {label}{source_note} icin taslak mesaj acildi."
+                return f"Draft message opened in WhatsApp Desktop for {label}{source_note}."
             ok_send, send_detail = _auto_send_with_pyautogui()
             if ok_send:
-                return f"WhatsApp Desktop uzerinden {label}{source_note} kisisine mesaj gonderildi."
+                return f"Message sent to {label}{source_note} via WhatsApp Desktop."
             return (
-                "WhatsApp Desktop sohbeti acildi ama otomatik gonderim tamamlanamadi. "
-                f"{send_detail}. pyautogui'nin kurulu ve WhatsApp penceresinin on planda olmasi gerekiyor."
+                "WhatsApp Desktop chat opened but auto-send could not complete. "
+                f"{send_detail}. pyautogui must be installed and the WhatsApp window must be in the foreground."
             )
         if app_target == "desktop":
-            # Web fallback'e dusme
-            return f"WhatsApp Desktop acilirken hata oldu: {detail}"
+            # Don't fall back to web
+            return f"Error opening WhatsApp Desktop: {detail}"
 
     ok, browser_label = _open_whatsapp_web(normalized_phone, message)
     if not ok:
         return browser_label
     if not send_now:
         return (
-            f"WhatsApp sohbeti {browser_label} icinde "
-            f"{resolved_name or f'+{normalized_phone}'}{source_note} icin taslak mesajla acildi. "
-            "Gondermek icin Enter'a bas."
+            f"WhatsApp chat opened in {browser_label} "
+            f"with a draft message for {resolved_name or f'+{normalized_phone}'}{source_note}. "
+            "Press Enter to send."
         )
     ok_send, send_detail = _auto_send_with_pyautogui()
     if ok_send:
         label = resolved_name or f"+{normalized_phone}"
-        return f"WhatsApp Web uzerinden {label}{source_note} kisisine mesaj gonderildi."
+        return f"Message sent to {label}{source_note} via WhatsApp Web."
     return (
-        "WhatsApp Web sohbeti acildi ama otomatik gonderim tamamlanamadi. "
-        f"{send_detail}. pyautogui'nin kurulu olmasi gerekiyor."
+        "WhatsApp Web chat opened but auto-send could not complete. "
+        f"{send_detail}. pyautogui must be installed."
     )

@@ -1,13 +1,13 @@
 """
-TTS (Text-to-Speech) — Windows surumu.
-Windows SAPI'yi pyttsx3 (varsa) veya PowerShell System.Speech ile kullanir.
+TTS (Text-to-Speech) — Windows version.
+Uses Windows SAPI via pyttsx3 (if available) or PowerShell System.Speech.
 """
 
 import subprocess
 import threading
 
 
-# pyttsx3 ile sesleri once dene; yoksa PowerShell SAPI fallback.
+# Try pyttsx3 first; fall back to PowerShell SAPI.
 try:
     import pyttsx3  # type: ignore
     _HAS_PYTTSX3 = True
@@ -15,13 +15,13 @@ except Exception:
     _HAS_PYTTSX3 = False
 
 
-# Windows'ta yerlesik Turkce ses (Win10+): "Microsoft Tolga Desktop".
-# Yoksa varsayilan ses kullanilir.
+# Built-in Turkish voice on Windows 10+: "Microsoft Tolga Desktop".
+# Falls back to default voice if not available.
 VOICE_HINTS = ("tolga", "turkish", "tr-tr")
 
 
 def _powershell_speak(text: str) -> None:
-    # System.Speech.Synthesis.SpeechSynthesizer ile konusur.
+    # Uses System.Speech.Synthesis.SpeechSynthesizer to speak.
     escaped = text.replace("'", "''")
     script = (
         "Add-Type -AssemblyName System.Speech;"

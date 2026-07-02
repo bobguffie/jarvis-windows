@@ -1,8 +1,8 @@
 """
-Medya oynatma — Windows surumu.
-- Spotify Desktop: spotify: URI scheme ile arama acar; istenirse pyautogui ile oynatir.
-- YouTube: tarayicida oynatir.
-- Apple Music: Windows'ta yoktur; web sayfasi acilir.
+Media playback — Windows version.
+- Spotify Desktop: opens via spotify: URI scheme; optionally plays with pyautogui.
+- YouTube: plays in browser.
+- Apple Music: not available on Windows; opens web page.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from actions.browser import browser_control
 
 
 def _spotify_installed() -> bool:
-    # Registry / PATH veya AppData kontrolu
+    # Registry / PATH or AppData check
     for env_var in ("APPDATA", "LOCALAPPDATA"):
         base = os.environ.get(env_var, "")
         if base and os.path.exists(os.path.join(base, "Spotify", "Spotify.exe")):
@@ -33,19 +33,19 @@ def _press_keys_via_pyautogui(keys: list[str]) -> tuple[bool, str]:
     try:
         import pyautogui  # type: ignore
     except Exception as exc:
-        return False, f"pyautogui bulunamadi: {exc}"
+        return False, f"pyautogui not found: {exc}"
     try:
         for key in keys:
             pyautogui.press(key)
             time.sleep(0.18)
         return True, "ok"
     except Exception as exc:
-        return False, f"pyautogui hatasi: {exc}"
+        return False, f"pyautogui error: {exc}"
 
 
 def _play_spotify(query: str, autoplay: bool = True) -> str:
     if not _spotify_installed():
-        return "Spotify yuklu gorunmuyor."
+        return "Spotify does not appear to be installed."
 
     encoded_query = urllib.parse.quote(query.strip())
     search_uri = f"spotify:search:{encoded_query}"
@@ -53,18 +53,18 @@ def _play_spotify(query: str, autoplay: bool = True) -> str:
     try:
         os.startfile(search_uri)
     except OSError as exc:
-        return f"Spotify acilamadi: {exc}"
+        return f"Could not open Spotify: {exc}"
 
     if not autoplay:
-        return f"Spotify icinde '{query}' aramasi acildi."
+        return f"Spotify search opened for '{query}'."
 
     time.sleep(2.0)
     ok, detail = _press_keys_via_pyautogui(["tab", "down", "enter", "space"])
     if ok:
-        return f"Spotify'da oynatiliyor: {query}"
+        return f"Playing on Spotify: {query}"
     return (
-        f"Spotify aramasi acildi ama otomatik oynatma tamamlanamadi: {detail}. "
-        "pyautogui kurulu olmali ve Spotify on planda olmali."
+        f"Spotify search opened but auto-play could not complete: {detail}. "
+        "pyautogui must be installed and Spotify must be in the foreground."
     )
 
 
@@ -76,7 +76,7 @@ def _play_apple_music_web(query: str) -> str:
 
 def play_media(query: str, provider: str = "auto", autoplay: bool = True) -> str:
     if not query or not query.strip():
-        return "Calinacak icerik belirtilmedi."
+        return "No content specified to play."
 
     normalized_provider = (provider or "auto").strip().lower()
     if normalized_provider in {"yt", "youtube music"}:
@@ -94,6 +94,6 @@ def play_media(query: str, provider: str = "auto", autoplay: bool = True) -> str
     # auto
     if _spotify_installed():
         result = _play_spotify(query, autoplay=autoplay)
-        if "yuklu gorunmuyor" not in result and "acilamadi" not in result:
+        if "does not appear" not in result and "Could not open" not in result:
             return result
     return _play_youtube(query)

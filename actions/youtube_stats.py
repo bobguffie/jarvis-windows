@@ -39,10 +39,10 @@ def _format_duration(raw: str) -> str:
     minutes, seconds = divmod(total, 60)
     hours, minutes = divmod(minutes, 60)
     if hours:
-        return f"{hours}s {minutes}dk"
+        return f"{hours}h {minutes}m"
     if minutes:
-        return f"{minutes}dk {seconds:02d}sn"
-    return f"{seconds}sn"
+        return f"{minutes}m {seconds:02d}s"
+    return f"{seconds}s"
 
 
 def _parse_dt(raw: str) -> dt.datetime | None:
@@ -62,10 +62,10 @@ def _days_ago_text(published_at: str) -> str:
     delta = now - published.astimezone(dt.timezone.utc)
     days = max(0, delta.days)
     if days == 0:
-        return "bugün"
+        return "today"
     if days == 1:
-        return "dün"
-    return f"{days} gün önce"
+        return "yesterday"
+    return f"{days} days ago"
 
 
 def _average(values: list[int]) -> float:
@@ -123,20 +123,20 @@ def _api_get(endpoint: str, params: dict, api_key: str) -> dict:
     message = str(error.get("message", "") or "")
 
     if reason == "keyInvalid":
-        raise RuntimeError("YouTube API anahtari gecersiz gorunuyor.")
+        raise RuntimeError("YouTube API key appears to be invalid.")
     if reason == "quotaExceeded":
-        raise RuntimeError("YouTube API kotasi su anda dolu gorunuyor.")
+        raise RuntimeError("YouTube API quota is currently full.")
     if reason in {"accessNotConfigured", "forbidden"}:
-        raise RuntimeError("YouTube Data API bu anahtar icin aktif degil veya erisim engelli.")
+        raise RuntimeError("YouTube Data API is not enabled or access is denied for this key.")
     if response.status_code == 404:
-        raise RuntimeError("YouTube verisi bulunamadi.")
-    raise RuntimeError(message or f"YouTube API hatasi ({response.status_code}).")
+        raise RuntimeError("YouTube data not found.")
+    raise RuntimeError(message or f"YouTube API error ({response.status_code}).")
 
 
 def _fetch_channel_payload(channel_ref: str, api_key: str) -> tuple[dict, str]:
     filter_name, filter_value = _normalize_channel_ref(channel_ref)
     if not filter_name or not filter_value:
-        raise RuntimeError("YouTube kanal handle'i ayarlanmamis. Ayarlardan @handle gir.")
+        raise RuntimeError("YouTube channel handle not set. Enter @handle in settings.")
 
     payload = _api_get(
         "channels",
@@ -150,7 +150,7 @@ def _fetch_channel_payload(channel_ref: str, api_key: str) -> tuple[dict, str]:
     items = payload.get("items") or []
     if not items:
         raise RuntimeError(
-            f"YouTube kanalini bulamadim. Ayarlardaki kanal handle alanina '{filter_value}' benzeri bir deger gir."
+            f"Could not find YouTube channel. Enter a value like '{filter_value}' in the channel handle field in settings."
         )
     return items[0], filter_value
 
@@ -231,18 +231,18 @@ def _trend_sentence(videos: list[dict]) -> str:
         return ""
     ratio = recent_avg / older_avg
     if ratio >= 1.18:
-        return "Son videolar onceki gruba gore daha guclu performans gosteriyor."
+        return "Recent videos are performing stronger than the previous batch."
     if ratio <= 0.82:
-        return "Son videolar onceki gruba gore biraz daha yavas gidiyor."
-    return "Son videolarin performansi genel olarak dengeli."
+        return "Recent videos are slightly slower than the previous batch."
+    return "Recent video performance is generally balanced."
 
 
 def get_youtube_channel_report(query: str = "overview", handle: str = "", video_limit: int = DEFAULT_VIDEO_LIMIT) -> str:
     api_key = str(get_app_config_value("youtube_api_key", "") or "").strip()
     if not api_key:
         return (
-            "YouTube istatistikleri icin once YouTube API Key gerekli. "
-            "Ayarlar > API Settings icinden YouTube API anahtarini gir."
+            "YouTube API Key is required for YouTube statistics. "
+            "Enter your YouTube API key in Settings > API Settings."
         )
 
     try:
@@ -251,7 +251,7 @@ def get_youtube_channel_report(query: str = "overview", handle: str = "", video_
         statistics = channel.get("statistics") or {}
         uploads_id = ((channel.get("contentDetails") or {}).get("relatedPlaylists") or {}).get("uploads", "")
 
-        channel_title = snippet.get("title", "YouTube kanalin")
+        channel_title = snippet.get("title", "Your YouTube channel")
         custom_url = str(snippet.get("customUrl", "") or "").strip()
         display_handle = custom_url if custom_url.startswith("@") else channel_ref
         subscribers = int(statistics.get("subscriberCount") or 0)
@@ -263,21 +263,21 @@ def get_youtube_channel_report(query: str = "overview", handle: str = "", video_
 
         parts = [
             (
-                f"Public YouTube verine gore {channel_title} kanalinda "
-                f"{_format_int(subscribers)} abone, {_format_int(total_views)} toplam goruntulenme "
-                f"ve {_format_int(video_count)} video var."
+                f"According to public YouTube data, {channel_title} has "
+                f"{_format_int(subscribers)} subscribers, {_format_int(total_views)} total views "
+                f"and {_format_int(video_count)} videos."
             )
         ]
         if display_handle:
-            parts.append(f"Kanal referansi: {display_handle}.")
+            parts.append(f"Channel reference: {display_handle}.")
 
         if valid_videos:
             avg_views = round(_average([video.get("views", 0) for video in valid_videos]))
             avg_likes = round(_average([video.get("likes", 0) for video in valid_videos]))
             avg_comments = round(_average([video.get("comments", 0) for video in valid_videos]))
             parts.append(
-                f"Son {len(valid_videos)} videonun ortalamasi {_format_int(avg_views)} izlenme, "
-                f"{_format_int(avg_likes)} begeni ve {_format_int(avg_comments)} yorum."
+                f"Average for the last {len(valid_videos)} videos: {_format_int(avg_views)} views, "
+                f"{_format_int(avg_likes)} likes and {_format_int(avg_comments)} comments."
             )
 
             best_video = max(valid_videos, key=lambda item: item.get("views", 0))
@@ -289,8 +289,8 @@ def get_youtube_channel_report(query: str = "overview", handle: str = "", video_
             if best_duration:
                 best_tail.append(best_duration)
             parts.append(
-                f"En guclu son video '{best_video.get('title', 'Video')}' "
-                f"- {_format_int(best_video.get('views', 0))} izlenme"
+                f"Best recent video '{best_video.get('title', 'Video')}' "
+                f"- {_format_int(best_video.get('views', 0))} views"
                 + (f" ({', '.join(best_tail)})" if best_tail else "")
                 + "."
             )
@@ -307,30 +307,30 @@ def get_youtube_channel_report(query: str = "overview", handle: str = "", video_
                     gaps.append(max(0.0, delta.total_seconds() / 86400))
                 if gaps:
                     avg_gap = sum(gaps) / len(gaps)
-                    parts.append(f"Yayin tempon son videolarda ortalama {avg_gap:.1f} gunde bir.")
+                    parts.append(f"Your upload pace averages one video every {avg_gap:.1f} days.")
 
             trend = _trend_sentence(valid_videos)
             if trend:
                 parts.append(trend)
 
             query_l = str(query or "").lower()
-            if any(word in query_l for word in ("detay", "analiz", "rapor", "son video", "son videolar")):
+            if any(word in query_l for word in ("detay", "analiz", "rapor", "detail", "analysis", "report", "last video", "last videos")):
                 recent_lines = []
                 for index, video in enumerate(valid_videos[: min(3, len(valid_videos))], start=1):
                     tail = _days_ago_text(video.get("published_at", ""))
                     recent_lines.append(
                         f"{index}. {video.get('title', 'Video')} - "
-                        f"{_format_int(video.get('views', 0))} izlenme, "
-                        f"{_format_int(video.get('likes', 0))} begeni, "
-                        f"{_format_int(video.get('comments', 0))} yorum"
+                        f"{_format_int(video.get('views', 0))} views, "
+                        f"{_format_int(video.get('likes', 0))} likes, "
+                        f"{_format_int(video.get('comments', 0))} comments"
                         + (f" ({tail})" if tail else "")
                     )
                 if recent_lines:
-                    parts.append("Son video detayi: " + " | ".join(recent_lines) + ".")
+                    parts.append("Recent video details: " + " | ".join(recent_lines) + ".")
 
         parts.append(
-            "Not: Studio erisimi olmadan izlenme suresi, CTR, gosterim, gelir ve trafik kaynagi verilerini goremem."
+            "Note: Without Studio access, I cannot see watch time, CTR, impressions, revenue, or traffic source data."
         )
         return " ".join(parts)
     except Exception as exc:
-        return f"YouTube istatistikleri alinamadi: {exc}"
+        return f"Could not retrieve YouTube statistics: {exc}"

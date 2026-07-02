@@ -1,5 +1,5 @@
 """
-Terminal komutu calistirma — Windows PowerShell.
+Run terminal commands — Windows PowerShell.
 """
 
 import subprocess
@@ -20,7 +20,7 @@ BLOCKED = [
     "bcdedit",
 ]
 
-# Tek basina yazildiginda iz birakan komutlar (gercekten silen / yetki degistiren)
+# Standalone commands that leave a mark (actually delete / change permissions)
 _PREFIX_BLOCK = (
     "del ", "erase ", "rd ", "rmdir ", "format ",
     "takeown ", "icacls ", "attrib +s",
@@ -30,19 +30,19 @@ _PREFIX_BLOCK = (
 
 def shell_run(command: str, timeout: int = 30) -> str:
     if not command:
-        return "Komut belirtilmedi."
+        return "No command specified."
 
     cmd_lower = command.lower().strip()
 
     if cmd_lower.startswith(_PREFIX_BLOCK):
         return (
-            "Guvenlik: Dosya veya yetki degistiren komutlar dogrudan calistirilmiyor. "
-            "Daha guvenli ve dar kapsamli bir komut dene."
+            "Security: Commands that modify files or permissions are not executed directly. "
+            "Try a safer, more specific command."
         )
 
     for blocked in BLOCKED:
         if blocked in cmd_lower:
-            return f"Guvenlik: Bu komut engellendi -> {blocked}"
+            return f"Security: This command is blocked -> {blocked}"
 
     try:
         result = subprocess.run(
@@ -51,11 +51,11 @@ def shell_run(command: str, timeout: int = 30) -> str:
         )
         output = (result.stdout + result.stderr).strip()
         if not output:
-            return "Komut basariyla calisti (cikti yok)."
+            return "Command executed successfully (no output)."
         if len(output) > 800:
-            output = output[:800] + "\n... (cikti kisaltildi)"
+            output = output[:800] + "\n... (output truncated)"
         return output
     except subprocess.TimeoutExpired:
-        return f"Komut zaman asimina ugradi ({timeout}s)."
+        return f"Command timed out ({timeout}s)."
     except Exception as e:
-        return f"Hata: {e}"
+        return f"Error: {e}"

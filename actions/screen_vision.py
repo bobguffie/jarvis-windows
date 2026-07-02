@@ -1,8 +1,8 @@
 """
-Ekran analizi — Windows surumu.
-Aktif pencerenin ekran goruntusunu Windows API (ctypes + PIL) ile alir,
-sonra secili backend'e gore Gemini Vision veya LM Studio (OpenAI-uyumlu
-vision modeli) ile analiz eder.
+Screen analysis — Windows version.
+Takes a screenshot of the active window using Windows API (ctypes + PIL),
+then analyzes it with Gemini Vision or LM Studio (OpenAI-compatible vision model)
+depending on the selected backend.
 """
 
 from __future__ import annotations
@@ -34,9 +34,9 @@ VISION_MAX_INLINE_BYTES = 5_500_000
 
 def _screen_permission_message() -> str:
     return (
-        "Ekran goruntusu alinamadi. Windows'ta yonetici izni veya korumali "
-        "icerik kisitlamasi olabilir. JARVIS'i normal kullanici hesabinda "
-        "calistirdigindan ve hedef pencerenin DRM korumali olmadigindan emin ol."
+        "Could not take a screenshot. There may be admin permission restrictions "
+        "or protected content limitations in Windows. Make sure JARVIS is running "
+        "under a normal user account and the target window is not DRM-protected."
     )
 
 
@@ -87,7 +87,7 @@ def _capture_active_window() -> tuple[bool, str, dict]:
     try:
         bbox, owner, title = _get_foreground_window_rect()
         if not bbox:
-            return False, "Aktif pencere bulunamadi.", {}
+            return False, "Active window not found.", {}
         left, top, right, bottom = bbox
         if right - left <= 4 or bottom - top <= 4:
             image = ImageGrab.grab(all_screens=True)
@@ -107,7 +107,7 @@ def _capture_active_window() -> tuple[bool, str, dict]:
             "bounds": {"left": left, "top": top, "right": right, "bottom": bottom},
         }
     except Exception as exc:
-        return False, f"Ekran goruntusu alinamadi: {exc}", {}
+        return False, f"Could not take screenshot: {exc}", {}
 
 
 def _image_looks_blank(image_path: Path) -> bool:
@@ -125,7 +125,7 @@ def _image_looks_blank(image_path: Path) -> bool:
 
 
 def _prepare_image_bytes(image_path: Path) -> tuple[bytes, str]:
-    """Goruntuyu uygun boyuta indirir ve (bytes, mime) doner."""
+    """Resizes the image to a suitable size and returns (bytes, mime)."""
     mime_type, _ = mimetypes.guess_type(str(image_path))
     if not mime_type:
         mime_type = "image/png"
@@ -150,20 +150,20 @@ def _prepare_image_bytes(image_path: Path) -> tuple[bytes, str]:
 
 
 def _vision_prompt(query: str, owner_name: str, window_title: str) -> str:
-    label = window_title or owner_name or "aktif pencere"
-    user_query = (query or "Ekranda ne var?").strip()
+    label = window_title or owner_name or "active window"
+    user_query = (query or "What's on the screen?").strip()
     return (
-        "Sen Windows uzerinde JARVIS icin ekran analizi yapan bir goruntu yorumlayicisisin.\n"
-        "Asagidaki ekran goruntusu aktif pencereye ait.\n"
-        f"Pencere baglami: {label}\n\n"
-        "Gorevlerin:\n"
-        "1. Pencerenin genel amacini 1-2 cumlede acikla.\n"
-        "2. Gorunen onemli metinleri, hata mesajlarini, butonlari, basliklari ve durum etiketlerini oku.\n"
-        "3. Kullanici sorusunu bu goruntuye gore dogrudan cevapla.\n"
-        "4. Eger bir hata, uyari veya dikkat edilmesi gereken bir sey varsa bunu ayri ve net belirt.\n"
-        "5. Uydurma yapma. Emin olmadigin kisimlarda bunu soyle.\n\n"
-        f"Kullanici sorusu: {user_query}\n\n"
-        "Yaniti Turkce ver. Gereksiz uzun olma, ama okunabilir detay ver."
+        "You are an image interpreter for JARVIS on Windows performing screen analysis.\n"
+        "The screenshot below belongs to the active window.\n"
+        f"Window context: {label}\n\n"
+        "Your tasks:\n"
+        "1. Explain the general purpose of the window in 1-2 sentences.\n"
+        "2. Read any visible important text, error messages, buttons, headings, and status labels.\n"
+        "3. Answer the user's question directly based on this image.\n"
+        "4. If there is an error, warning, or something that needs attention, state it clearly and separately.\n"
+        "5. Do not make things up. Say so when you are unsure about something.\n\n"
+        f"User question: {user_query}\n\n"
+        "Provide the response in English. Be concise but give readable detail."
     )
 
 
@@ -214,22 +214,22 @@ def _is_quota_vision_error(exc: Exception) -> bool:
 
 def _friendly_vision_error(exc: Exception) -> str:
     if _is_quota_vision_error(exc):
-        return "Vision istegi kota veya hiz limitine takildi. Biraz bekleyip tekrar dene."
+        return "Vision request hit a quota or rate limit. Wait a bit and try again."
     if _is_transient_vision_error(exc):
-        return "Vision servisi su anda yogun veya gecici olarak ulasilamiyor. Biraz sonra tekrar dene."
-    return f"Vision istegi basarisiz oldu: {exc}"
+        return "Vision service is currently busy or temporarily unavailable. Try again later."
+    return f"Vision request failed: {exc}"
 
 
 def _analyze_with_gemini(query: str, image_path: Path, owner_name: str, window_title: str) -> str:
     api_key = str(get_app_config_value("gemini_api_key", "") or "").strip()
     if not api_key:
-        return "Gemini API anahtari eksik oldugu icin ekran analizi yapilamadi."
+        return "Screen analysis could not be performed because the Gemini API key is missing."
 
     try:
         from google import genai  # type: ignore
         from google.genai import types  # type: ignore
     except Exception as exc:
-        return f"Gemini SDK yuklenemedi: {exc}"
+        return f"Gemini SDK could not be loaded: {exc}"
 
     prompt = _vision_prompt(query, owner_name, window_title)
     client = genai.Client(api_key=api_key)
@@ -252,7 +252,7 @@ def _analyze_with_gemini(query: str, image_path: Path, owner_name: str, window_t
                 merged = _extract_gemini_text(response)
                 if merged:
                     return merged
-                raise RuntimeError("Gemini gecerli bir ekran analizi metni dondurmedi.")
+                raise RuntimeError("Gemini did not return a valid screen analysis text.")
             except Exception as exc:
                 last_error = exc
                 if attempt < len(retry_delays) and _is_transient_vision_error(exc):
@@ -266,7 +266,7 @@ def _analyze_with_gemini(query: str, image_path: Path, owner_name: str, window_t
     raise RuntimeError(_friendly_vision_error(last_error))
 
 
-# ── LM Studio backend (OpenAI-uyumlu vision) ────────────────────────────────
+# ── LM Studio backend (OpenAI-compatible vision) ────────────────────────────────
 
 def _analyze_with_lmstudio(query: str, image_path: Path, owner_name: str, window_title: str) -> str:
     base = str(get_app_config_value("lmstudio_base_url", "http://127.0.0.1:1234/v1") or "").rstrip("/")
@@ -315,17 +315,17 @@ def _analyze_with_lmstudio(query: str, image_path: Path, owner_name: str, window
                     "image" in lower or "vision" in lower or "multimodal" in lower or "unsupported" in lower
                 ):
                     return (
-                        "LM Studio'da yuklu model goruntu (vision) desteklemiyor gibi gorunuyor. "
-                        "LM Studio'da bir vision modeli yukleyip 'lmstudio_vision_model' ayarini "
-                        "(veya 'lmstudio_model' degerini) o modele ayarla. "
-                        f"Sunucu yaniti: HTTP {resp.status_code} - {text[:200]}"
+                        "The model loaded in LM Studio does not appear to support image (vision) input. "
+                        "Load a vision model in LM Studio and set 'lmstudio_vision_model' "
+                        "(or 'lmstudio_model') to that model. "
+                        f"Server response: HTTP {resp.status_code} - {text[:200]}"
                     )
                 raise RuntimeError(f"LM Studio {resp.status_code}: {text[:300]}")
 
             data = resp.json()
             choices = data.get("choices") or []
             if not choices:
-                raise RuntimeError("LM Studio bos cevap dondurdu.")
+                raise RuntimeError("LM Studio returned an empty response.")
             msg = choices[0].get("message", {}) or {}
             content = msg.get("content")
             text_out = ""
@@ -341,11 +341,11 @@ def _analyze_with_lmstudio(query: str, image_path: Path, owner_name: str, window
                 text_out = "\n".join(pieces).strip()
             if text_out:
                 return text_out
-            raise RuntimeError("LM Studio gecerli bir ekran analizi metni dondurmedi.")
+            raise RuntimeError("LM Studio did not return a valid screen analysis text.")
         except requests.exceptions.ConnectionError as exc:
             return (
-                "LM Studio sunucusuna baglanilamadi. LM Studio acik mi ve sunucu "
-                f"({base}) calisiyor mu? Hata: {exc}"
+                "Could not connect to LM Studio server. Is LM Studio running and the server "
+                f"({base}) active? Error: {exc}"
             )
         except Exception as exc:
             last_error = exc
@@ -363,7 +363,7 @@ def _analyze_with_lmstudio(query: str, image_path: Path, owner_name: str, window
 def analyze_screen(query: str, target: str = "active_window") -> str:
     target = (target or "active_window").strip().lower()
     if target != "active_window":
-        return "Screen Vision v1 yalnizca aktif pencere analizini destekliyor."
+        return "Screen Vision v1 only supports active window analysis."
 
     ok, detail, payload = _capture_active_window()
     if not ok:
@@ -375,13 +375,13 @@ def analyze_screen(query: str, target: str = "active_window") -> str:
 
     try:
         if not image_path.exists():
-            return "Ekran goruntusu dosyasi bulunamadi. Tekrar dene."
+            return "Screenshot file not found. Try again."
         if image_path.stat().st_size <= 0:
-            return "Ekran goruntusu bos geldi. " + _screen_permission_message()
+            return "Screenshot came back empty. " + _screen_permission_message()
         if _image_looks_blank(image_path):
             return (
-                "Ekran goruntusu siyah veya bos gorunuyor. Bu, korumali bir uygulama "
-                "(orn. DRM iceren video oynaticilari) acikken olabilir. "
+                "The screenshot appears black or blank. This can happen when a protected "
+                "application (e.g., DRM-protected video players) is open. "
                 + _screen_permission_message()
             )
         try:
@@ -392,13 +392,13 @@ def analyze_screen(query: str, target: str = "active_window") -> str:
         except Exception as exc:
             prefix = f"{owner_name} / {window_title}".strip(" /")
             if prefix:
-                return f"Ekran goruntusu alindi ({prefix}) ama analiz tamamlanamadi: {exc}"
-            return f"Ekran goruntusu alindi ama analiz tamamlanamadi: {exc}"
+                return f"Screenshot taken ({prefix}) but analysis could not complete: {exc}"
+            return f"Screenshot taken but analysis could not complete: {exc}"
 
         if owner_name or window_title:
             title = " / ".join(part for part in (owner_name, window_title) if part).strip()
             if title:
-                return f"[Aktif pencere: {title}]\n{analysis}"
+                return f"[Active window: {title}]\n{analysis}"
         return analysis
     finally:
         try:

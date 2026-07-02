@@ -1,8 +1,8 @@
 """
-Animsaticilar — Windows surumu.
+Reminders — Windows version.
 
-Outlook varsa Outlook Tasks ile, yoksa memory/reminders.json lokal dosyasiyla
-calisir. API'ler orijinal macOS surumuyle ayni imzalara sahiptir.
+Uses Outlook Tasks if Outlook is available, otherwise works with a local
+memory/reminders.json file. APIs have the same signatures as the original macOS version.
 """
 
 from __future__ import annotations
@@ -17,8 +17,8 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 LOCAL_FILE = BASE_DIR / "memory" / "reminders.json"
 
-TR_WEEKDAYS = ["Pazartesi", "Sali", "Carsamba", "Persembe", "Cuma", "Cumartesi", "Pazar"]
-TR_MONTHS = ["", "Ocak", "Subat", "Mart", "Nisan", "Mayis", "Haziran", "Temmuz", "Agustos", "Eylul", "Ekim", "Kasim", "Aralik"]
+WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+MONTHS = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 
 
 def _try_outlook():
@@ -49,13 +49,13 @@ def _save_local(items: list[dict]) -> None:
 
 def _normalize_query(query: str) -> tuple[str, int]:
     q = (query or "").strip().lower()
-    if any(t in q for t in ("bugun", "today")):
+    if any(t in q for t in ("today", "bugun")):
         return "today", 8
-    if any(t in q for t in ("geciken", "gecmis", "overdue")):
+    if any(t in q for t in ("overdue", "geciken", "gecmis")):
         return "overdue", 8
-    if any(t in q for t in ("siradaki", "sıradaki", "next")):
+    if any(t in q for t in ("next", "siradaki", "sıradaki")):
         return "next", 1
-    if any(t in q for t in ("hepsi", "tum", "tüm", "all", "listele")):
+    if any(t in q for t in ("all", "hepsi", "tum", "tüm", "listele")):
         return "all", 10
     return "upcoming", 8
 
@@ -86,7 +86,7 @@ def _normalize_due_iso(due_iso: str) -> tuple[int, bool]:
             return int(parsed.timestamp()), all_day
         except ValueError:
             continue
-    raise ValueError("Animsatici tarihi gecersiz. 'YYYY-MM-DD' veya 'YYYY-MM-DDTHH:MM' kullan.")
+    raise ValueError("Reminder date is invalid. Use 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM'.")
 
 
 def _outlook_list(query_mode: str, limit: int, list_name: str) -> list[dict]:
@@ -103,20 +103,20 @@ def _outlook_list(query_mode: str, limit: int, list_name: str) -> list[dict]:
             try:
                 if getattr(it, "Complete", False):
                     continue
-                title = str(getattr(it, "Subject", "") or "Adsiz animsatici")
+                title = str(getattr(it, "Subject", "") or "Unnamed reminder")
                 due = getattr(it, "DueDate", None)
                 due_ts = 0
                 if due:
                     try:
                         d = dt.datetime.strptime(str(due)[:19], "%Y-%m-%d %H:%M:%S")
-                        # Outlook 4501-01-01 = "yok"
+                        # Outlook 4501-01-01 = "none"
                         if d.year < 4000:
                             due_ts = int(d.timestamp())
                     except Exception:
                         pass
                 result.append({
                     "title": title,
-                    "list_name": list_name or "Outlook Gorevler",
+                    "list_name": list_name or "Outlook Tasks",
                     "notes": str(getattr(it, "Body", "") or ""),
                     "completed": False,
                     "priority": int(getattr(it, "Importance", 1) or 1),
@@ -146,7 +146,7 @@ def _outlook_add(title: str, due_ts: int, notes: str, list_name: str, priority: 
         task.Save()
         return {
             "title": title,
-            "list_name": list_name or "Outlook Gorevler",
+            "list_name": list_name or "Outlook Tasks",
             "notes": notes,
             "priority": task.Importance,
             "due_ts": due_ts,
@@ -160,18 +160,18 @@ def _day_label(when: dt.datetime, now: dt.datetime) -> str:
     today = now.date()
     target = when.date()
     if target == today:
-        return "bugun"
+        return "today"
     if target == today + dt.timedelta(days=1):
-        return "yarin"
-    return f"{when.day} {TR_MONTHS[when.month]} {TR_WEEKDAYS[when.weekday()]}"
+        return "tomorrow"
+    return f"{when.day} {MONTHS[when.month]} {WEEKDAYS[when.weekday()]}"
 
 
 def _format_due(item: dict, now: dt.datetime) -> str:
     if item.get("due_ts", 0) <= 0:
-        return "zaman atanmamis"
+        return "no due date set"
     due = dt.datetime.fromtimestamp(item["due_ts"])
     if item.get("all_day"):
-        return f"{_day_label(due, now)} tum gun"
+        return f"{_day_label(due, now)} all day"
     return f"{_day_label(due, now)} {due.strftime('%H:%M')}"
 
 
@@ -180,7 +180,7 @@ def _format_reminder_line(item: dict, now: dt.datetime) -> str:
     if item.get("list_name"):
         parts.append(f"[{item['list_name']}]")
     if item.get("priority") == 2:
-        parts.append("(yuksek oncelik)")
+        parts.append("(high priority)")
     return " ".join(parts)
 
 
@@ -208,24 +208,24 @@ def get_reminders(query: str = "upcoming", limit: int = 8, list_name: str = "") 
     items.sort(key=lambda i: (i.get("due_ts", 0) <= 0, i.get("due_ts", 0), i["title"].lower()))
 
     if not items:
-        if mode == "today":   return "Bugun icin animsatici gorunmuyor."
-        if mode == "overdue": return "Geciken animsatici gorunmuyor."
-        if mode == "next":    return "Siradaki animsaticiyi bulamadim."
-        if mode == "all":     return "Kayitli acik animsatici gorunmuyor."
-        return "Yaklasan animsatici gorunmuyor."
+        if mode == "today":   return "No reminders for today."
+        if mode == "overdue": return "No overdue reminders."
+        if mode == "next":    return "Could not find the next reminder."
+        if mode == "all":     return "No open reminders found."
+        return "No upcoming reminders."
 
     if mode == "next":
-        return f"Siradaki animsatici: {_format_reminder_line(items[0], now)}."
+        return f"Next reminder: {_format_reminder_line(items[0], now)}."
 
     items = items[:limit]
     if mode == "today":
-        header = f"Bugun icin {len(items)} animsatici buldum:"
+        header = f"Found {len(items)} reminders for today:"
     elif mode == "overdue":
-        header = f"Gecikmis {len(items)} animsatici buldum:"
+        header = f"Found {len(items)} overdue reminders:"
     elif mode == "all":
-        header = f"Acik {len(items)} animsatici buldum:"
+        header = f"Found {len(items)} open reminders:"
     else:
-        header = f"Yaklasan {len(items)} animsatici buldum:"
+        header = f"Found {len(items)} upcoming reminders:"
 
     lines = [header]
     for item in items:
@@ -242,7 +242,7 @@ def add_reminder(
     all_day: bool = False,
 ) -> str:
     if not title or not title.strip():
-        return "Animsatici basligi bos olamaz."
+        return "Reminder title cannot be empty."
 
     due_ts = 0
     all_day_final = bool(all_day)
@@ -259,7 +259,7 @@ def add_reminder(
         created = {
             "id": uuid.uuid4().hex,
             "title": title.strip(),
-            "list_name": list_name or "Yerel",
+            "list_name": list_name or "Local",
             "notes": notes or "",
             "priority": prio_map.get((priority or "").lower(), 1),
             "due_ts": due_ts,
@@ -272,4 +272,4 @@ def add_reminder(
     now = dt.datetime.now()
     when = _format_due(created, now)
     list_suffix = f" [{created['list_name']}]" if created.get("list_name") else ""
-    return f"Animsatici eklendi: {when} - {created['title']}{list_suffix}"
+    return f"Reminder added: {when} - {created['title']}{list_suffix}"

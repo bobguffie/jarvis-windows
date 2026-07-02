@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-JARVIS Windows — Gercek zamanli sesli yardimci cekirdegi
+JARVIS Windows — Real-time voice assistant core
 https://github.com/bnsware
-Windows ortamina uyarlanmis calisma akisi
+Adapted workflow for Windows environment
 """
 
 import asyncio
@@ -50,17 +50,17 @@ RECV_SAMPLE_RATE = 24000
 CHUNK_SIZE       = 1024
 pya              = pyaudio.PyAudio()
 
-# ── Tool tanımları ──────────────────────────────────────────────────────────
+# ── Tool definitions ──────────────────────────────────────────────────────────
 TOOL_DECLARATIONS = [
     {
         "name": "open_app",
-        "description": "Windows'ta herhangi bir uygulamayı açar. Spotify, Edge, Chrome, Terminal, Explorer, VS Code vb.",
+        "description": "Opens any application on Windows like Spotify, Chrome, or VS Code.",
         "parameters": {
             "type": "OBJECT",
             "properties": {
                 "app_name": {
                     "type": "STRING",
-                    "description": "Uygulama adı (örn. 'Spotify', 'Safari', 'Terminal')"
+                    "description": "Application name (e.g. 'Spotify', 'Chrome', 'Terminal')"
                 }
             },
             "required": ["app_name"]
@@ -68,7 +68,7 @@ TOOL_DECLARATIONS = [
     },
     {
         "name": "sys_info",
-        "description": "Sistem bilgisi alır: pil durumu, CPU, RAM, disk, saat, tarih, ağ bağlantısı.",
+        "description": "Retrieves system information like battery, CPU, RAM, and time.",
         "parameters": {
             "type": "OBJECT",
             "properties": {
@@ -83,15 +83,15 @@ TOOL_DECLARATIONS = [
     {
         "name": "get_weather",
         "description": (
-            "Anlik hava durumunu ozetler. Varsayilan konum Hatay'dır. "
-            "Kullanici hava durumunu, sicakligi veya yagmur durumunu sordugunda kullan."
+            "Summarises the current weather. Default location is Hatay. "
+            "Use when the user asks about weather, temperature, or rain conditions."
         ),
         "parameters": {
             "type": "OBJECT",
             "properties": {
                 "location": {
                     "type": "STRING",
-                    "description": "Sehir veya konum. Bos birakilirsa Hatay kullanilir."
+                    "description": "City or location. Leave empty to use Hatay."
                 }
             }
         }
@@ -99,9 +99,9 @@ TOOL_DECLARATIONS = [
     {
         "name": "get_calendar_events",
         "description": (
-            "Windows takvimini (Outlook varsa Outlook, yoksa lokal JSON) okur. "
-            "Bugun, yarin, siradaki etkinlik veya yaklasan ajandayi ozetler. "
-            "Kullanici toplanti, takvim, ajanda, etkinlik veya gunluk programini sordugunda kullan."
+            "Reads the Windows calendar (Outlook if available, otherwise local JSON). "
+            "Summarises today's, tomorrow's, next events or upcoming agenda. "
+            "Use when the user asks about meetings, calendar, agenda, events or daily schedule."
         ),
         "parameters": {
             "type": "OBJECT",
@@ -109,13 +109,13 @@ TOOL_DECLARATIONS = [
                 "query": {
                     "type": "STRING",
                     "description": (
-                        "today | tomorrow | next | agenda | week veya dogal dilde "
-                        "'onumuzdeki 30 gun', '2 hafta', 'bu ay', 'gelecek ay'"
+                        "today | tomorrow | next | agenda | week or natural language "
+                        "'next 30 days', '2 weeks', 'this month', 'next month'"
                     )
                 },
                 "limit": {
                     "type": "NUMBER",
-                    "description": "Maksimum etkinlik sayisi"
+                    "description": "Maximum number of events"
                 }
             },
             "required": ["query"]
@@ -124,40 +124,40 @@ TOOL_DECLARATIONS = [
     {
         "name": "add_calendar_event",
         "description": (
-            "Windows takvimine (Outlook varsa Outlook, yoksa lokal JSON) yeni etkinlik ekler. "
-            "Kullanici toplanti, randevu, takvime ekleme veya etkinlik olusturma isterse kullan. "
-            "Baslangic tarihini gercek tarih/saat olarak ver; bitis verilmezse varsayilan sure kullanilir."
+            "Adds a new event to the Windows calendar (Outlook if available, otherwise local JSON). "
+            "Use when the user wants to add a meeting, appointment, calendar entry or create an event. "
+            "Provide the start date as actual date/time; if end is not given, a default duration is used."
         ),
         "parameters": {
             "type": "OBJECT",
             "properties": {
                 "title": {
                     "type": "STRING",
-                    "description": "Etkinlik basligi. Ornek: 'Disci Randevusu'"
+                    "description": "Event title. Example: 'Dentist Appointment'"
                 },
                 "start_iso": {
                     "type": "STRING",
-                    "description": "Baslangic tarih/saat. ISO veya yyyy-MM-dd HH:mm formatinda."
+                    "description": "Start date/time. ISO or yyyy-MM-dd HH:mm format."
                 },
                 "end_iso": {
                     "type": "STRING",
-                    "description": "Bitis tarih/saat. Opsiyonel."
+                    "description": "End date/time. Optional."
                 },
                 "location": {
                     "type": "STRING",
-                    "description": "Etkinlik konumu. Opsiyonel."
+                    "description": "Event location. Optional."
                 },
                 "notes": {
                     "type": "STRING",
-                    "description": "Etkinlik notlari. Opsiyonel."
+                    "description": "Event notes. Optional."
                 },
                 "calendar_name": {
                     "type": "STRING",
-                    "description": "Eklenecek takvim adi. Opsiyonel."
+                    "description": "Calendar name to add to. Optional."
                 },
                 "all_day": {
                     "type": "BOOLEAN",
-                    "description": "true ise tum gun etkinligi olusturur."
+                    "description": "If true, creates an all-day event."
                 }
             },
             "required": ["title", "start_iso"]
@@ -166,28 +166,28 @@ TOOL_DECLARATIONS = [
     {
         "name": "delete_calendar_event",
         "description": (
-            "Windows takviminden etkinlik siler. "
-            "Kullanici bir toplantiyi, randevuyu veya takvim kaydini silmek istediginde kullan. "
-            "Ayni ada birden fazla etkinlik varsa dogru kaydi bulmak icin baslangic tarihini gercek tarih/saat olarak ver."
+            "Deletes an event from the Windows calendar. "
+            "Use when the user wants to delete a meeting, appointment or calendar record. "
+            "If there are multiple events with the same name, provide the start date as actual date/time to find the correct record."
         ),
         "parameters": {
             "type": "OBJECT",
             "properties": {
                 "title": {
                     "type": "STRING",
-                    "description": "Silinecek etkinlik basligi. Ornek: 'Disci Randevusu'"
+                    "description": "Event title to delete. Example: 'Dentist Appointment'"
                 },
                 "start_iso": {
                     "type": "STRING",
-                    "description": "Opsiyonel tarih/saat. Ayni isimli birden fazla etkinligi ayirt etmek icin kullan."
+                    "description": "Optional date/time. Used to distinguish between events with the same name."
                 },
                 "calendar_name": {
                     "type": "STRING",
-                    "description": "Opsiyonel takvim adi"
+                    "description": "Optional calendar name"
                 },
                 "delete_all_matches": {
                     "type": "BOOLEAN",
-                    "description": "true ise eslesen tum etkinlikleri siler"
+                    "description": "If true, deletes all matching events"
                 }
             },
             "required": ["title"]
@@ -196,9 +196,9 @@ TOOL_DECLARATIONS = [
     {
         "name": "get_reminders",
         "description": (
-            "Animsaticilar listesini (Outlook Tasks varsa, yoksa lokal JSON) okur. "
-            "Bugunku, yaklasan, geciken veya tum acik animsaticilari ozetler. "
-            "Kullanici hatirlatma, animsatici, reminder veya yapilacaklar listesini sordugunda kullan."
+            "Reads the reminders list (Outlook Tasks if available, otherwise local JSON). "
+            "Summarises today's, upcoming, overdue or all open reminders. "
+            "Use when the user asks about reminders, to-do list or tasks."
         ),
         "parameters": {
             "type": "OBJECT",
@@ -209,11 +209,11 @@ TOOL_DECLARATIONS = [
                 },
                 "limit": {
                     "type": "NUMBER",
-                    "description": "Maksimum animsatici sayisi"
+                    "description": "Maximum number of reminders"
                 },
                 "list_name": {
                     "type": "STRING",
-                    "description": "Istenirse belirli bir animsatici listesi adi"
+                    "description": "Optional specific reminder list name"
                 }
             },
             "required": ["query"]
@@ -222,28 +222,28 @@ TOOL_DECLARATIONS = [
     {
         "name": "add_reminder",
         "description": (
-            "Yeni bir animsatici ekler (Outlook Tasks varsa Outlook, yoksa lokal JSON). "
-            "Kullanici 'hatirlat', 'animsatici ekle', 'reminder kur' dediginde kullan. "
-            "Goreli zaman ifadelerini bugunku tarih baglamina gore due_iso alanina ISO formatinda cevir."
+            "Adds a new reminder (Outlook Tasks if available, otherwise local JSON). "
+            "Use when the user says 'remind me', 'add reminder', 'set a reminder'. "
+            "Convert relative time expressions to ISO format in the due_iso field based on today's date context."
         ),
         "parameters": {
             "type": "OBJECT",
             "properties": {
                 "title": {
                     "type": "STRING",
-                    "description": "Animsatici basligi"
+                    "description": "Reminder title"
                 },
                 "due_iso": {
                     "type": "STRING",
-                    "description": "Opsiyonel tarih/saat. Ornek: 2026-04-13T09:00 veya tum gun icin 2026-04-13"
+                    "description": "Optional date/time. Example: 2026-04-13T09:00 or 2026-04-13 for all day"
                 },
                 "notes": {
                     "type": "STRING",
-                    "description": "Opsiyonel not"
+                    "description": "Optional notes"
                 },
                 "list_name": {
                     "type": "STRING",
-                    "description": "Opsiyonel animsatici listesi"
+                    "description": "Optional reminder list"
                 },
                 "priority": {
                     "type": "STRING",
@@ -251,7 +251,7 @@ TOOL_DECLARATIONS = [
                 },
                 "all_day": {
                     "type": "BOOLEAN",
-                    "description": "Tum gun animsatici ise true"
+                    "description": "If true, creates an all-day reminder"
                 }
             },
             "required": ["title"]
@@ -259,26 +259,26 @@ TOOL_DECLARATIONS = [
     },
     {
         "name": "browser_control",
-        "description": "Tarayıcıda URL açar, Google'da arama yapar veya YouTube'da ilk sonucu doğrudan oynatır.",
+        "description": "Opens a URL in the browser, searches Google, or plays the first YouTube result directly.",
         "parameters": {
             "type": "OBJECT",
             "properties": {
                 "action": {"type": "STRING", "description": "open_url | search | play_youtube"},
-                "url":    {"type": "STRING", "description": "Açılacak URL (open_url için)"},
-                "query":  {"type": "STRING", "description": "Arama sorgusu (search veya play_youtube için)"}
+                "url":    {"type": "STRING", "description": "URL to open (for open_url)"},
+                "query":  {"type": "STRING", "description": "Search query (for search or play_youtube)"}
             },
             "required": ["action"]
         }
     },
     {
         "name": "shell_run",
-        "description": "Windows PowerShell komutu çalıştırır. Dosya işlemleri, sistem yönetimi.",
+        "description": "Runs a Windows PowerShell command. File operations, system management.",
         "parameters": {
             "type": "OBJECT",
             "properties": {
                 "command": {
                     "type": "STRING",
-                    "description": "Çalıştırılacak bash komutu"
+                    "description": "Command to execute"
                 }
             },
             "required": ["command"]
@@ -287,17 +287,16 @@ TOOL_DECLARATIONS = [
     {
         "name": "play_media",
         "description": (
-            "YouTube, Spotify Desktop veya Apple Music Web üzerinden şarkı, müzik veya video açar. "
-            "Kullanıcı belirli bir platform söylerse onu kullan. "
-            "Belirtmezse uygun olanı dene. "
-            "Kullanıcı 'çal', 'oynat', 'aç' diyorsa autoplay=true kullan."
+            "Opens a song, music or video on YouTube, Spotify Desktop or Apple Music Web. "
+            "If the user specifies a platform, use that. Otherwise try the appropriate one. "
+            "If the user says 'play', 'open', use autoplay=true."
         ),
         "parameters": {
             "type": "OBJECT",
             "properties": {
                 "query": {
                     "type": "STRING",
-                    "description": "Şarkı, sanatçı, albüm veya video arama ifadesi"
+                    "description": "Song, artist, album or video search term"
                 },
                 "provider": {
                     "type": "STRING",
@@ -305,7 +304,7 @@ TOOL_DECLARATIONS = [
                 },
                 "autoplay": {
                     "type": "BOOLEAN",
-                    "description": "true ise mümkünse doğrudan oynatır"
+                    "description": "If true, plays directly when possible"
                 }
             },
             "required": ["query"]
@@ -314,9 +313,9 @@ TOOL_DECLARATIONS = [
     {
         "name": "get_youtube_channel_report",
         "description": (
-            "YouTube kanalinin public istatistiklerini ve son videolarin performansini raporlar. "
-            "Kullanici kanal istatistiklerini, abone sayisini, son videolarini, buyume hizini "
-            "veya YouTube analizini sordugunda kullan. Bu arac Studio yerine public YouTube Data API verisini kullanir."
+            "Reports public statistics and recent video performance of a YouTube channel. "
+            "Use when the user asks about channel statistics, subscriber count, recent videos, "
+            "growth rate or YouTube analytics. This tool uses public YouTube Data API data, not Studio."
         ),
         "parameters": {
             "type": "OBJECT",
@@ -324,21 +323,21 @@ TOOL_DECLARATIONS = [
                 "query": {
                     "type": "STRING",
                     "description": (
-                        "Dogal dilde analiz istegi. Ornek: "
-                        "'YouTube istatistiklerim nasil', 'son videolarimi analiz et', "
-                        "'kanal buyumemi ozetle'"
+                        "Natural language analysis request. Example: "
+                        "'How are my YouTube stats?', 'analyze my recent videos', "
+                        "'summarise my channel growth'"
                     )
                 },
                 "handle": {
                     "type": "STRING",
                     "description": (
-                        "Opsiyonel kanal handle'i, kanal linki veya kanal ID'si. "
-                        "Bos birakilirsa ayarlardaki youtube_channel_handle kullanilir."
+                        "Optional channel handle, channel link or channel ID. "
+                        "If left empty, the youtube_channel_handle from settings is used."
                     )
                 },
                 "video_limit": {
                     "type": "NUMBER",
-                    "description": "Analize dahil edilecek son video sayisi. Varsayilan 6."
+                    "description": "Number of recent videos to include in analysis. Default 6."
                 }
             },
             "required": ["query"]
@@ -347,20 +346,20 @@ TOOL_DECLARATIONS = [
     {
         "name": "analyze_screen",
         "description": (
-            "Aktif pencerenin ekran goruntusunu alip Gemini vision ile analiz eder. "
-            "Kullanici ekranda ne oldugunu, bir hatayi, gorunen metni, butonlari veya pencere icerigini sordugunda kullan. "
-            "Bu surum yalnizca aktif pencereyi destekler."
+            "Takes a screenshot of the active window and analyses it with Gemini vision. "
+            "Use when the user asks what is on the screen, an error, visible text, buttons or window content. "
+            "This version only supports the active window."
         ),
         "parameters": {
             "type": "OBJECT",
             "properties": {
                 "query": {
                     "type": "STRING",
-                    "description": "Kullanicinin ekranla ilgili sorusu. Ornek: 'Bu hatayi oku', 'Ekranda ne var?'"
+                    "description": "The user's question about the screen. Example: 'Read this error', 'What's on the screen?'"
                 },
                 "target": {
                     "type": "STRING",
-                    "description": "Su an sadece active_window desteklenir."
+                    "description": "Currently only active_window is supported."
                 }
             },
             "required": ["query"]
@@ -368,7 +367,7 @@ TOOL_DECLARATIONS = [
     },
     {
         "name": "save_memory",
-        "description": "Kullanıcı hakkında önemli bilgiyi kalıcı belleğe kaydeder. İsim, tercihler, projeler vb. duyunca sessizce çağır.",
+        "description": "Saves important information about the user to persistent memory. Call silently when hearing name, preferences, projects etc.",
         "parameters": {
             "type": "OBJECT",
             "properties": {
@@ -376,8 +375,8 @@ TOOL_DECLARATIONS = [
                     "type": "STRING",
                     "description": "identity | preferences | projects | notes"
                 },
-                "key":   {"type": "STRING", "description": "Kısa anahtar (örn. 'name')"},
-                "value": {"type": "STRING", "description": "Değer (İngilizce)"}
+                "key":   {"type": "STRING", "description": "Short key (e.g. 'name')"},
+                "value": {"type": "STRING", "description": "Value (in English)"}
             },
             "required": ["category", "key", "value"]
         }
@@ -385,24 +384,24 @@ TOOL_DECLARATIONS = [
     {
         "name": "delete_memory",
         "description": (
-            "Kalici hafizadaki bir kaydi siler. "
-            "Kullanici 'bunu hafizandan kaldir', 'unut', 'sil' gibi bir sey derse kullan. "
-            "Mumkunse category ve key ile sil; emin degilsen match_text ile ilgili kaydi bulup kaldir."
+            "Deletes a record from persistent memory. "
+            "Use when the user says 'remove that from your memory', 'forget', 'delete'. "
+            "If possible, delete by category and key; if unsure, use match_text to find and remove the relevant record."
         ),
         "parameters": {
             "type": "OBJECT",
             "properties": {
                 "category": {
                     "type": "STRING",
-                    "description": "Kaydin kategorisi. Ornek: notes | identity | preferences | projects"
+                    "description": "Category of the record. Example: notes | identity | preferences | projects"
                 },
                 "key": {
                     "type": "STRING",
-                    "description": "Silinecek anahtar. Ornek: claude_limit_refresh"
+                    "description": "Key to delete. Example: claude_limit_refresh"
                 },
                 "match_text": {
                     "type": "STRING",
-                    "description": "Kaydi bulmak icin kullanilacak dogal dil parcasi. Ornek: 'claude ai limit yenilenmesi'"
+                    "description": "Natural language fragment to find the record. Example: 'claude ai limit refresh'"
                 }
             }
         }
@@ -410,35 +409,35 @@ TOOL_DECLARATIONS = [
     {
         "name": "send_whatsapp_message",
         "description": (
-            "WhatsApp Desktop veya WhatsApp Web üzerinden mesaj taslağı açar veya mesajı gönderir. "
-            "Kişi adı veya telefon numarasıyla çalışabilir. "
-            "Telefon numarası verilmemişse kişi adını önce kayıtlı WhatsApp kişileri ve içe aktarılan telefon rehberinde ara. "
-            "Kullanıcı 'gönder', 'yolla', 'ile', 'hemen gönder' gibi açık bir gönderme niyeti söylüyorsa "
-            "ekstra onay istemeden send_now=true kullan. "
-            "Yalnızca 'hazırla', 'taslak aç', 'yaz ama gönderme' diyorsa send_now=false kullan."
+            "Opens a message draft or sends a message via WhatsApp Desktop or WhatsApp Web. "
+            "Can work with a contact name or phone number. "
+            "If no phone number is given, first search the contact name in saved WhatsApp contacts and imported phone book. "
+            "If the user explicitly says 'send', 'forward', 'send now' with a clear sending intent, "
+            "use send_now=true without asking for extra confirmation. "
+            "If the user only says 'prepare', 'draft', 'write but don't send', use send_now=false."
         ),
         "parameters": {
             "type": "OBJECT",
             "properties": {
                 "recipient_name": {
                     "type": "STRING",
-                    "description": "Kişi adı. Örn: 'Anne', 'Ahmet', 'Ece'"
+                    "description": "Contact name. E.g.: 'Mom', 'John', 'Ece'"
                 },
                 "phone_number": {
                     "type": "STRING",
-                    "description": "Uluslararası telefon numarası. Örn: +905551112233"
+                    "description": "International phone number. E.g.: +905551112233"
                 },
                 "message": {
                     "type": "STRING",
-                    "description": "Gönderilecek mesaj içeriği"
+                    "description": "Message content to send"
                 },
                 "app_target": {
                     "type": "STRING",
-                    "description": "desktop | web | auto. Varsayılan auto, tercihen desktop."
+                    "description": "desktop | web | auto. Default auto, prefers desktop."
                 },
                 "send_now": {
                     "type": "BOOLEAN",
-                    "description": "true ise sohbet açıldıktan sonra mesajı otomatik gönderir"
+                    "description": "If true, automatically sends the message after opening the chat"
                 }
             },
             "required": ["message"]
@@ -447,23 +446,23 @@ TOOL_DECLARATIONS = [
     {
         "name": "save_whatsapp_contact",
         "description": (
-            "Sık kullanılan bir WhatsApp kişisini adı ve telefon numarasıyla kalıcı belleğe kaydeder. "
-            "Kullanıcı bir kişiyi 'annem', 'Ahmet', 'iş ortağım' gibi tekrar kullanılacak şekilde tanımladığında kullan."
+            "Saves a frequently used WhatsApp contact with name and phone number to persistent memory. "
+            "Use when the user defines a contact to be reused, like 'my mom', 'Ahmet', 'my work partner'."
         ),
         "parameters": {
             "type": "OBJECT",
             "properties": {
                 "display_name": {
                     "type": "STRING",
-                    "description": "Kaydedilecek kişi adı. Örn: 'Annem', 'Ahmet'"
+                    "description": "Contact name to save. E.g.: 'Mom', 'Ahmet'"
                 },
                 "phone_number": {
                     "type": "STRING",
-                    "description": "Uluslararası telefon numarası. Örn: +905551112233"
+                    "description": "International phone number. E.g.: +905551112233"
                 },
                 "aliases": {
                     "type": "STRING",
-                    "description": "Virgülle ayrılmış alternatif hitaplar. Örn: 'anne, annem, mom'"
+                    "description": "Comma-separated alternative names. E.g.: 'mom, mother, anne'"
                 }
             },
             "required": ["display_name", "phone_number"]
@@ -481,9 +480,9 @@ def load_system_prompt() -> str:
         return PROMPT_PATH.read_text(encoding="utf-8")
     except Exception:
         return (
-            "Sen JARVIS'sin — Windows'ta çalışan kişisel AI asistanı. "
-            "Türkçe konuş. Kısa ve net yanıtlar ver. "
-            "Araçları kullanarak görevleri tamamla, asla taklit etme."
+            "You are JARVIS — a personal AI assistant running on Windows. "
+            "Speak in English. Give short and clear responses. "
+            "Complete tasks by using tools, never simulate or hallucinate."
         )
 
 
@@ -511,7 +510,7 @@ class JarvisLive:
     def _focus_ui_section_for_tool(self, tool_name: str, args: dict):
         if tool_name == "sys_info":
             query = str(args.get("query", "")).strip().lower()
-            if query in {"time", "saat", "zaman", "date", "tarih"}:
+            if query in {"time", "date"}:
                 self.ui.focus_panel("time", duration_ms=5200)
             else:
                 self.ui.focus_panel("system", duration_ms=5200)
@@ -521,9 +520,9 @@ class JarvisLive:
     def _on_text_command(self, text: str):
         if self._paused:
             return
-        self.ui.write_log(f"Siz: {text}")
+        self.ui.write_log(f"You: {text}")
         if not self._loop or not self.session:
-            self.ui.write_log("ERR: JARVIS bağlantısı henüz hazır değil.")
+            self.ui.write_log("ERR: JARVIS connection not ready yet.")
             return
         asyncio.run_coroutine_threadsafe(
             self.session.send_client_content(
@@ -568,23 +567,17 @@ class JarvisLive:
         if not text:
             return False
         error_markers = (
-            "hata",
             "error",
-            "alinamadi",
-            "alınamadı",
-            "bulunamadi",
-            "bulunamadı",
-            "acilamadi",
-            "açılamadı",
-            "tamamlanamadi",
-            "tamamlanamadı",
-            "gecersiz",
-            "geçersiz",
-            "izin gerekiyor",
-            "izin gerekli",
-            "baglanti",
-            "bağlantı",
-            "gerekli.",
+            "could not",
+            "cannot",
+            "not found",
+            "could not be opened",
+            "could not be completed",
+            "invalid",
+            "permission required",
+            "permission needed",
+            "connection",
+            "required.",
         )
         return any(marker in text for marker in error_markers)
 
@@ -603,7 +596,7 @@ class JarvisLive:
         if tool_name == "send_whatsapp_message":
             text = str(result or "").lower()
             if bool(args.get("send_now", False)):
-                return "gönderildi" in text or "gonderildi" in text
+                return "sent" in text
             return False
 
         return False
@@ -629,7 +622,7 @@ class JarvisLive:
         mem_str = format_memory_for_prompt(memory)
         sys_p   = load_system_prompt()
         now     = datetime.datetime.now()
-        time_ctx = f"[ŞU ANKİ ZAMAN]\n{now.strftime('%A, %d %B %Y — %H:%M')}\n\n"
+        time_ctx = f"[CURRENT TIME]\n{now.strftime('%A, %d %B %Y — %H:%M')}\n\n"
 
         parts = [time_ctx]
         if mem_str:
@@ -658,7 +651,7 @@ class JarvisLive:
         self.ui.set_state("THINKING")
 
         loop   = asyncio.get_event_loop()
-        result = "Tamam."
+        result = "Done."
         had_exception = False
 
         try:
@@ -681,19 +674,19 @@ class JarvisLive:
             elif name == "open_app":
                 r = await loop.run_in_executor(
                     None, lambda: open_app(args.get("app_name", "")))
-                result = r or f"{args.get('app_name')} açıldı."
+                result = r or f"{args.get('app_name')} opened."
 
             elif name == "sys_info":
                 self._focus_ui_section_for_tool(name, args)
                 r = await loop.run_in_executor(
                     None, lambda: sys_info(args.get("query", "all")))
-                result = r or "Bilgi alındı."
+                result = r or "Information retrieved."
 
             elif name == "get_weather":
                 self._focus_ui_section_for_tool(name, args)
                 r = await loop.run_in_executor(
                     None, lambda: get_weather_summary(args.get("location") or None))
-                result = r or "Hava durumu bilgisi alindi."
+                result = r or "Weather information retrieved."
 
             elif name == "get_calendar_events":
                 r = await loop.run_in_executor(
@@ -703,7 +696,7 @@ class JarvisLive:
                         int(args.get("limit", 6) or 6),
                     ),
                 )
-                result = r or "Takvim bilgisi alindi."
+                result = r or "Calendar information retrieved."
 
             elif name == "add_calendar_event":
                 r = await loop.run_in_executor(
@@ -718,7 +711,7 @@ class JarvisLive:
                         bool(args.get("all_day", False)),
                     ),
                 )
-                result = r or "Takvim etkinligi eklendi."
+                result = r or "Calendar event added."
 
             elif name == "delete_calendar_event":
                 r = await loop.run_in_executor(
@@ -730,7 +723,7 @@ class JarvisLive:
                         bool(args.get("delete_all_matches", False)),
                     ),
                 )
-                result = r or "Takvim etkinligi silindi."
+                result = r or "Calendar event deleted."
 
             elif name == "get_reminders":
                 r = await loop.run_in_executor(
@@ -741,7 +734,7 @@ class JarvisLive:
                         args.get("list_name", ""),
                     ),
                 )
-                result = r or "Animsatici bilgisi alindi."
+                result = r or "Reminder information retrieved."
 
             elif name == "add_reminder":
                 r = await loop.run_in_executor(
@@ -755,7 +748,7 @@ class JarvisLive:
                         bool(args.get("all_day", False)),
                     ),
                 )
-                result = r or "Animsatici eklendi."
+                result = r or "Reminder added."
 
             elif name == "browser_control":
                 r = await loop.run_in_executor(
@@ -764,12 +757,12 @@ class JarvisLive:
                         args.get("url"),
                         args.get("query")
                     ))
-                result = r or "Tamam."
+                result = r or "Done."
 
             elif name == "shell_run":
                 r = await loop.run_in_executor(
                     None, lambda: shell_run(args.get("command", "")))
-                result = r or "Komut çalıştırıldı."
+                result = r or "Command executed."
 
             elif name == "play_media":
                 r = await loop.run_in_executor(
@@ -780,7 +773,7 @@ class JarvisLive:
                         bool(args.get("autoplay", True)),
                     ),
                 )
-                result = r or "Medya oynatma başlatıldı."
+                result = r or "Media playback started."
 
             elif name == "get_youtube_channel_report":
                 r = await loop.run_in_executor(
@@ -791,17 +784,17 @@ class JarvisLive:
                         int(args.get("video_limit", 6) or 6),
                     ),
                 )
-                result = r or "YouTube kanal raporu alindi."
+                result = r or "YouTube channel report retrieved."
 
             elif name == "analyze_screen":
                 r = await loop.run_in_executor(
                     None,
                     lambda: analyze_screen(
-                        args.get("query", "Ekranda ne var?"),
+                        args.get("query", "What's on the screen?"),
                         args.get("target", "active_window"),
                     ),
                 )
-                result = r or "Ekran analizi tamamlandi."
+                result = r or "Screen analysis completed."
 
             elif name == "send_whatsapp_message":
                 r = await loop.run_in_executor(
@@ -814,7 +807,7 @@ class JarvisLive:
                         args.get("app_target", "auto"),
                     ),
                 )
-                result = r or "WhatsApp işlemi tamamlandı."
+                result = r or "WhatsApp operation completed."
 
             elif name == "save_whatsapp_contact":
                 r = await loop.run_in_executor(
@@ -825,13 +818,13 @@ class JarvisLive:
                         args.get("aliases", ""),
                     ),
                 )
-                result = r or "WhatsApp kişisi kaydedildi."
+                result = r or "WhatsApp contact saved."
 
             else:
-                result = f"Bilinmeyen araç: {name}"
+                result = f"Unknown tool: {name}"
 
         except Exception as e:
-            result = f"Hata: {e}"
+            result = f"Error: {e}"
             had_exception = True
             traceback.print_exc()
             self.speak_error(name, e)
@@ -858,7 +851,7 @@ class JarvisLive:
             await self.session.send_realtime_input(media=msg)
 
     async def _listen_audio(self):
-        print("[JARVIS] 🎤 Mikrofon başladı")
+        print("[JARVIS] 🎤 Microphone started")
         stream = await asyncio.to_thread(
             pya.open,
             format=FORMAT, channels=CHANNELS,
@@ -874,13 +867,13 @@ class JarvisLive:
                 if not jarvis_speaking and not self.ui.muted and not self._paused:
                     await self.out_queue.put({"data": data, "mime_type": "audio/pcm"})
         except Exception as e:
-            print(f"[JARVIS] ❌ Mikrofon: {e}")
+            print(f"[JARVIS] ❌ Microphone: {e}")
             raise
         finally:
             stream.close()
 
     async def _receive_audio(self):
-        print("[JARVIS] 👂 Alım başladı")
+        print("[JARVIS] 👂 Receiving started")
         out_buf, in_buf = [], []
         output_noise = False
         output_noise_samples = []
@@ -916,7 +909,7 @@ class JarvisLive:
 
                             full_in = " ".join(in_buf).strip()
                             if full_in:
-                                self.ui.write_log(f"Siz: {full_in}")
+                                self.ui.write_log(f"You: {full_in}")
                             in_buf = []
 
                             full_out = " ".join(out_buf).strip()
@@ -924,14 +917,14 @@ class JarvisLive:
                                 self.ui.write_log(f"JARVIS: {full_out}")
                                 if output_noise_samples:
                                     self.ui.write_debug(
-                                        "Kısmen filtrelenen ses transcripti: " + " | ".join(output_noise_samples),
+                                        "Partially filtered speech transcript: " + " | ".join(output_noise_samples),
                                         level="WARN",
                                     )
                             elif output_noise:
-                                self.ui.write_log("ERR: JARVIS sesli yanıtını çözümlerken bir hata oluştu.")
+                                self.ui.write_log("ERR: An error occurred while decoding JARVIS's voice response.")
                                 if output_noise_samples:
                                     self.ui.write_debug(
-                                        "Filtrelenen ham transcript: " + " | ".join(output_noise_samples),
+                                        "Filtered raw transcript: " + " | ".join(output_noise_samples),
                                         level="WARN",
                                     )
                                 self.ui.set_state("ERROR")
@@ -949,12 +942,12 @@ class JarvisLive:
                             function_responses=fn_responses)
 
         except Exception as e:
-            print(f"[JARVIS] ❌ Alım: {e}")
+            print(f"[JARVIS] ❌ Receive: {e}")
             traceback.print_exc()
             raise
 
     async def _play_audio(self):
-        print("[JARVIS] 🔊 Ses çalma başladı")
+        print("[JARVIS] 🔊 Audio playback started")
         stream = await asyncio.to_thread(
             pya.open,
             format=FORMAT, channels=CHANNELS,
@@ -966,7 +959,7 @@ class JarvisLive:
                 self.set_speaking(True)
                 await asyncio.to_thread(stream.write, chunk)
         except Exception as e:
-            print(f"[JARVIS] ❌ Ses: {e}")
+            print(f"[JARVIS] ❌ Audio: {e}")
             raise
         finally:
             self.set_speaking(False)
@@ -979,13 +972,13 @@ class JarvisLive:
         )
 
         while True:
-            # Duraklatılmışsa bağlanma, bekle
+            # If paused, don't connect, wait
             if self._paused:
                 await asyncio.sleep(1)
                 continue
 
             try:
-                print("[JARVIS] 🔌 Bağlanıyor...")
+                print("[JARVIS] 🔌 Connecting...")
                 self.ui.set_state("THINKING")
                 config = self._build_config()
 
@@ -998,9 +991,9 @@ class JarvisLive:
                     self.audio_in_queue = asyncio.Queue()
                     self.out_queue      = asyncio.Queue(maxsize=10)
 
-                    print("[JARVIS] ✅ Bağlandı.")
+                    print("[JARVIS] ✅ Connected.")
                     self.ui.set_state("LISTENING")
-                    self.ui.write_log("SYS: JARVIS hazır. Dinliyorum...")
+                    self.ui.write_log("SYS: JARVIS ready. Listening...")
 
                     tg.create_task(self._send_realtime())
                     tg.create_task(self._listen_audio())
@@ -1011,30 +1004,30 @@ class JarvisLive:
                 print(f"[JARVIS] ⚠️ {e}")
                 traceback.print_exc()
                 self.set_speaking(False)
-                self.ui.write_log(f"ERR: JARVIS baglantisi kesildi veya internete ulasilamiyor — {e}")
+                self.ui.write_log(f"ERR: JARVIS connection lost or no internet — {e}")
                 self.ui.set_state("ERROR")
-                print("[JARVIS] 🔄 3 saniyede yeniden bağlanıyor...")
+                print("[JARVIS] 🔄 Reconnecting in 3 seconds...")
                 await asyncio.sleep(3)
 
 
 def main():
     if os.environ.get("TERM_PROGRAM") == "vscode":
-        print("[JARVIS] VS Code icinden baslatildi.")
+        print("[JARVIS] Started from VS Code.")
 
     ui = JarvisUI()
 
     def runner():
-        # Kullanici Setup'ta backend secimini yapmis olabilir; once onu bekle.
+        # User may have selected a backend in Setup; wait for it first.
         ui.wait_for_api_key()
         backend = get_backend()
         if backend == "lmstudio":
             from core.lmstudio_runtime import JarvisLocal, ping_lmstudio
             ok, detail = ping_lmstudio()
             if not ok:
-                ui.write_log(f"ERR: LM Studio sunucusuna ulasilamadi ({detail}). "
-                             "LM Studio uygulamasinda 'Local Server' baslat.")
+                ui.write_log(f"ERR: Cannot reach LM Studio server ({detail}). "
+                             "Start 'Local Server' in the LM Studio app.")
             else:
-                ui.write_log(f"SYS: LM Studio hazir - modeller: {detail}")
+                ui.write_log(f"SYS: LM Studio ready - models: {detail}")
             jarvis = JarvisLocal(ui, TOOL_DECLARATIONS, load_system_prompt)
         else:
             jarvis = JarvisLive(ui)
@@ -1042,7 +1035,7 @@ def main():
         try:
             asyncio.run(jarvis.run())
         except KeyboardInterrupt:
-            print("\nKapatiliyor...")
+            print("\nShutting down...")
 
     threading.Thread(target=runner, daemon=True).start()
     ui.root.mainloop()

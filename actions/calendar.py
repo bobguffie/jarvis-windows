@@ -1,9 +1,9 @@
 """
-Takvim — Windows surumu.
+Calendar — Windows version.
 
-Outlook yuklu ise Outlook COM araciligiyla okur/yazar; degilse memory/calendar.json
-icinde lokal bir takvim tutar. Calendar API'leri orijinal macOS surumuyle ayni
-imzalara sahiptir.
+If Outlook is installed, reads/writes via Outlook COM; otherwise maintains a local
+calendar in memory/calendar.json. Calendar APIs have the same signatures as the
+original macOS version.
 """
 
 from __future__ import annotations
@@ -18,8 +18,8 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 LOCAL_CAL_FILE = BASE_DIR / "memory" / "calendar.json"
 
-TR_WEEKDAYS = ["Pazartesi", "Sali", "Carsamba", "Persembe", "Cuma", "Cumartesi", "Pazar"]
-TR_MONTHS = ["", "Ocak", "Subat", "Mart", "Nisan", "Mayis", "Haziran", "Temmuz", "Agustos", "Eylul", "Ekim", "Kasim", "Aralik"]
+WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+MONTHS = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 
 DEFAULT_DURATION_MIN = 60
 
@@ -84,7 +84,7 @@ def _outlook_events_in_range(start: dt.datetime, end: dt.datetime, calendar_name
                 events.append({
                     "start_ts": s_ts,
                     "end_ts": e_ts,
-                    "title": str(getattr(it, "Subject", "") or "Adsiz etkinlik"),
+                    "title": str(getattr(it, "Subject", "") or "Unnamed event"),
                     "calendar": calendar_name or "Outlook",
                     "location": str(getattr(it, "Location", "") or ""),
                     "all_day": bool(getattr(it, "AllDayEvent", False)),
@@ -166,7 +166,7 @@ def _outlook_delete(title: str, start: dt.datetime | None, calendar_name: str, d
         return False, None
 
 
-# ── Lokal JSON ──────────────────────────────────────────────────────────────
+# ── Local JSON ──────────────────────────────────────────────────────────────
 
 def _load_local() -> list[dict]:
     if not LOCAL_CAL_FILE.exists():
@@ -237,74 +237,74 @@ def _normalize_query(query: str) -> dict:
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     month_match = re.search(r"(\d+)\s*(ay|month|months)", q)
-    if any(t in q for t in ("gelecek ay", "onumuzdeki ay", "önümüzdeki ay", "next month")):
+    if any(t in q for t in ("next month", "gelecek ay", "onumuzdeki ay", "önümüzdeki ay")):
         start = _add_months(_month_start(now), 1)
         end = _add_months(start, 1)
         return {"start": start, "end": end, "default_limit": 24,
                 "kind": "next_month",
-                "header": "Gelecek ay icin {count} etkinlik buldum:",
-                "empty": "Gelecek ay takviminde etkinlik gorunmuyor."}
-    if "bu ay" in q or "this month" in q:
+                "header": "Found {count} events for next month:",
+                "empty": "No events on the calendar for next month."}
+    if "this month" in q or "bu ay" in q:
         start = _month_start(now)
         end = _add_months(start, 1)
         return {"start": start, "end": end, "default_limit": 24,
                 "kind": "this_month",
-                "header": "Bu ay icin {count} etkinlik buldum:",
-                "empty": "Bu ay takviminde etkinlik gorunmuyor."}
+                "header": "Found {count} events for this month:",
+                "empty": "No events on the calendar for this month."}
     if month_match:
         months = max(1, min(12, int(month_match.group(1))))
         return {"start": today_start, "end": _add_months(_month_start(now), months),
                 "default_limit": min(60, max(12, months * 12)), "kind": "months",
-                "header": f"Onumuzdeki {months} ay icin {{count}} etkinlik buldum:",
-                "empty": f"Onumuzdeki {months} ayda takviminde etkinlik gorunmuyor."}
+                "header": f"Found {{count}} events for the next {months} months:",
+                "empty": f"No events on the calendar for the next {months} months."}
     week_match = re.search(r"(\d+)\s*(hafta|week|weeks)", q)
     if week_match:
         weeks = max(1, min(12, int(week_match.group(1))))
         return {"start": today_start, "end": today_start + dt.timedelta(days=weeks * 7),
                 "default_limit": min(60, max(8, weeks * 8)), "kind": "weeks",
-                "header": f"Onumuzdeki {weeks} hafta icin {{count}} etkinlik buldum:",
-                "empty": f"Onumuzdeki {weeks} haftada takviminde etkinlik gorunmuyor."}
+                "header": f"Found {{count}} events for the next {weeks} weeks:",
+                "empty": f"No events on the calendar for the next {weeks} weeks."}
     day_match = re.search(r"(\d+)\s*(g[uü]n|gun|day|days)", q)
     if day_match:
         days = max(1, min(365, int(day_match.group(1))))
         return {"start": today_start, "end": today_start + dt.timedelta(days=days),
                 "default_limit": min(60, max(8, days * 2)), "kind": "days",
-                "header": f"Onumuzdeki {days} gun icin {{count}} etkinlik buldum:",
-                "empty": f"Onumuzdeki {days} gunde takviminde etkinlik gorunmuyor."}
-    if "yarin" in q or "yarın" in q or "tomorrow" in q:
+                "header": f"Found {{count}} events for the next {days} days:",
+                "empty": f"No events on the calendar for the next {days} days."}
+    if "tomorrow" in q or "yarin" in q or "yarın" in q:
         start = today_start + dt.timedelta(days=1)
         return {"start": start, "end": start + dt.timedelta(days=1),
                 "default_limit": 6, "kind": "tomorrow",
-                "header": "Yarin icin {count} etkinlik buldum:",
-                "empty": "Yarin takviminde etkinlik gorunmuyor."}
-    if any(t in q for t in ("hafta", "week", "7 gun")):
+                "header": "Found {count} events for tomorrow:",
+                "empty": "No events on the calendar for tomorrow."}
+    if any(t in q for t in ("week", "hafta", "7 gun")):
         return {"start": today_start, "end": today_start + dt.timedelta(days=7),
                 "default_limit": 10, "kind": "week",
-                "header": "Onumuzdeki 7 gun icin {count} etkinlik buldum:",
-                "empty": "Onumuzdeki 7 gunde takviminde etkinlik gorunmuyor."}
-    if any(t in q for t in ("siradaki", "sıradaki", "sonraki", "next")):
+                "header": "Found {count} events for the next 7 days:",
+                "empty": "No events on the calendar for the next 7 days."}
+    if any(t in q for t in ("next", "siradaki", "sıradaki", "sonraki")):
         return {"start": now, "end": now + dt.timedelta(days=365),
                 "default_limit": 1, "kind": "next", "header": "",
-                "empty": "Siradaki takvim etkinligini bulamadim."}
-    if any(t in q for t in ("ajanda", "agenda", "yaklasan", "yaklaşan", "upcoming")):
+                "empty": "Could not find the next calendar event."}
+    if any(t in q for t in ("agenda", "ajanda", "upcoming", "yaklasan", "yaklaşan")):
         return {"start": now, "end": now + dt.timedelta(days=30),
                 "default_limit": 8, "kind": "agenda",
-                "header": "Yaklasan ajandanda {count} etkinlik var:",
-                "empty": "Yaklasan takvim etkinligi gorunmuyor."}
+                "header": "Found {count} events in your upcoming agenda:",
+                "empty": "No upcoming calendar events."}
     return {"start": today_start, "end": today_start + dt.timedelta(days=1),
             "default_limit": 6, "kind": "today",
-            "header": "Bugun icin {count} etkinlik buldum:",
-            "empty": "Bugun takviminde etkinlik gorunmuyor."}
+            "header": "Found {count} events for today:",
+            "empty": "No events on the calendar for today."}
 
 
 def _day_label(when: dt.datetime, now: dt.datetime) -> str:
     today = now.date()
     target = when.date()
     if target == today:
-        return "bugun"
+        return "today"
     if target == today + dt.timedelta(days=1):
-        return "yarin"
-    return f"{when.day} {TR_MONTHS[when.month]} {TR_WEEKDAYS[when.weekday()]}"
+        return "tomorrow"
+    return f"{when.day} {MONTHS[when.month]} {WEEKDAYS[when.weekday()]}"
 
 
 def _format_event_line(event: dict, now: dt.datetime) -> str:
@@ -312,7 +312,7 @@ def _format_event_line(event: dict, now: dt.datetime) -> str:
     end = dt.datetime.fromtimestamp(event["end_ts"])
     prefix = _day_label(start, now)
     if event.get("all_day"):
-        timing = f"{prefix} tum gun"
+        timing = f"{prefix} all day"
     else:
         timing = f"{prefix} {start.strftime('%H:%M')}-{end.strftime('%H:%M')}"
     pieces = [f"{timing} - {event['title']}"]
@@ -341,7 +341,7 @@ def get_calendar_events(query: str = "today", limit: int = 6) -> str:
         return window["empty"]
 
     if window["kind"] == "next":
-        return f"Siradaki etkinlik: {_format_event_line(events[0], now)}."
+        return f"Next event: {_format_event_line(events[0], now)}."
 
     selected = events[:limit]
     header = str(window["header"]).format(count=len(selected))
@@ -362,10 +362,10 @@ def add_calendar_event(
 ) -> str:
     title = (title or "").strip()
     if not title:
-        return "Takvime eklemek icin etkinlik basligi gerekli."
+        return "An event title is required to add to the calendar."
     start = _parse_iso(start_iso)
     if not start:
-        return "Takvime eklemek icin gecerli baslangic tarihi gerekli."
+        return "A valid start date is required to add to the calendar."
     end = _parse_iso(end_iso) or start + dt.timedelta(minutes=DEFAULT_DURATION_MIN)
 
     result = _outlook_add(title, start, end, location, notes, all_day, calendar_name)
@@ -375,7 +375,7 @@ def add_calendar_event(
             "start_ts": int(start.timestamp()),
             "end_ts": int(end.timestamp()),
             "title": title,
-            "calendar": calendar_name or "Yerel",
+            "calendar": calendar_name or "Local",
             "location": location or "",
             "notes": notes or "",
             "all_day": bool(all_day),
@@ -386,7 +386,7 @@ def add_calendar_event(
         result = ev
 
     now = dt.datetime.now()
-    return f"Takvime eklendi: {_format_event_line(result, now)}."
+    return f"Added to calendar: {_format_event_line(result, now)}."
 
 
 def delete_calendar_event(
@@ -397,16 +397,16 @@ def delete_calendar_event(
 ) -> str:
     title = (title or "").strip()
     if not title:
-        return "Takvimden silmek icin etkinlik basligi gerekli."
+        return "An event title is required to delete from the calendar."
 
     start = _parse_iso(start_iso) if start_iso else None
     now = dt.datetime.now()
 
     ok, ev = _outlook_delete(title, start, calendar_name, delete_all_matches)
     if ok and ev:
-        return f"Takvimden silindi: {_format_event_line(ev, now)}."
+        return f"Deleted from calendar: {_format_event_line(ev, now)}."
 
-    # Lokal
+    # Local
     events = _load_local()
     deleted: list[dict] = []
     remaining = []
@@ -422,13 +422,13 @@ def delete_calendar_event(
             continue
         deleted.append(ev)
         if not delete_all_matches:
-            # Sadece bir tanesini sil
+            # Delete only one
             remaining.extend(events[events.index(ev) + 1:])
             break
 
     if not deleted:
-        return f"'{title}' baslikli etkinlik bulunamadi."
+        return f"Event titled '{title}' not found."
 
     _save_local(remaining)
     last = deleted[-1]
-    return f"Takvimden silindi: {_format_event_line(last, now)}."
+    return f"Deleted from calendar: {_format_event_line(last, now)}."

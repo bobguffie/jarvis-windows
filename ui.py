@@ -6,6 +6,7 @@ https://github.com/bnsware
 
 import os, time, math, random, threading, ctypes, itertools, webbrowser
 import tkinter as tk
+import tkinter.colorchooser as colorchooser
 from collections import deque
 from pathlib import Path
 import psutil
@@ -19,14 +20,14 @@ from app_config import (
     has_runtime_credentials,
 )
 from actions.weather import get_weather_summary
-from actions.health import get_health_data, get_health_card_lines
+from actions.health import get_health_card_lines
 
 BASE_DIR = Path(__file__).resolve().parent
 
 SYSTEM_NAME = "J.A.R.V.I.S"
 MODEL_BADGE = "VOICE CORE · Windows"
 
-# ── Renk paleti ──────────────────────────────────────────────────────────────
+# ── Color Palette ──────────────────────────────────────────────────────────────
 C_BG      = "#020c0c"
 C_PRI     = "#00d4c0"
 C_ORG     = "#ff6600"
@@ -42,7 +43,16 @@ C_MUTED   = "#cc2255"
 C_BLUE    = "#4488ff"
 C_GOLD    = "#ffcc00"
 
-# Orb durum renkleri
+# Load saved primary color from config
+def _load_primary_color() -> str:
+    try:
+        return str(load_app_config().get("primary_color", "#00d4c0") or "#00d4c0")
+    except Exception:
+        return "#00d4c0"
+
+C_PRI = _load_primary_color()
+
+# Orb status colors
 ORB_COLORS = {
     "LISTENING":    (0, 255, 136),
     "SPEAKING":     (68, 136, 255),
@@ -53,7 +63,7 @@ ORB_COLORS = {
     "INITIALISING": (255, 51, 68),
 }
 
-# ── Boyutlar ─────────────────────────────────────────────────────────────────
+# ── Dimensions ─────────────────────────────────────────────────────────────────
 W_TARGET = 2200
 H_TARGET = 1320
 LEFT_W_T = 360
@@ -65,10 +75,10 @@ CONTROL_H = 146
 
 VOICES = ["Charon", "Puck", "Aoede", "Kore", "Fenrir", "Leda", "Orus", "Zephyr"]
 
-# ── Lokal font yukleyicisi ──────────────────────────────────────────────────
-# Fonts/ klasorundeki tum .ttf dosyalarini *private* olarak yukleriz: sistem
-# geneline kurulum gerekmez, sadece bu surec icinde gorunur olur. Boylece
-# Orbitron gibi futuristic fontlari sadece klasore birakmak yeterli.
+# ── Local font loader ──────────────────────────────────────────────────────
+# We load all .ttf files in the Fonts/ folder as *private*: no system-wide
+# installation needed, only visible within this process. This way,
+# futuristic fonts like Orbitron just need to be placed in the folder.
 def _load_local_fonts() -> None:
     fonts_dir = BASE_DIR / "Fonts"
     if not fonts_dir.is_dir():
@@ -88,9 +98,9 @@ def _load_local_fonts() -> None:
 _load_local_fonts()
 
 
-# ── Font sistemi ─────────────────────────────────────────────────────────────
-# Govde icin Grift okunakli kaliyor; baslik/HUD icin Orbitron sci-fi hissi
-# veriyor. Orbitron yoksa Tk otomatik olarak varsayilana duser.
+# ── Font system ─────────────────────────────────────────────────────────────
+# Grift stays readable for body text; Orbitron gives a sci-fi feel for
+# headings/HUD. If Orbitron is missing, Tk falls back to the default.
 FONT_BODY_FAMILY = "Grift"
 FONT_DISPLAY_FAMILY = "Orbitron"
 
@@ -108,7 +118,7 @@ def font_display(size: int):
 
 
 def draw_text_glow(canvas, x, y, *, text, fill, font, glow_color, layers: int = 2, **kwargs):
-    """create_text + hafif neon hale. glow_color daha sonuk bir tonda olmali."""
+    """create_text + slight neon glow. glow_color should be in a dimmer tone."""
     for off in range(layers, 0, -1):
         for dx, dy in ((-off, 0), (off, 0), (0, -off), (0, off)):
             canvas.create_text(x + dx, y + dy, text=text, fill=glow_color, font=font, **kwargs)
@@ -126,7 +136,7 @@ STATE_HEX_COLORS = {
 
 # ── SoundManager ─────────────────────────────────────────────────────────────
 
-# Windows MCI (winmm) ile MP3 calma — ek bagimlilik gerektirmez.
+# MP3 playback with Windows MCI (winmm) — no additional dependencies required.
 try:
     _winmm = ctypes.windll.winmm
     _mciSendString = _winmm.mciSendStringW
@@ -141,7 +151,7 @@ _alias_counter = itertools.count(1)
 
 
 class _MciTrack:
-    """Tek bir MCI MP3 calma instance'i."""
+    """A single MCI MP3 playback instance."""
 
     def __init__(self, path: Path, volume: float):
         self.alias = f"jarvis_sfx_{next(_alias_counter)}"
@@ -153,7 +163,7 @@ class _MciTrack:
     def open(self) -> bool:
         if not _HAS_WINMM:
             return False
-        # MCI dosya yolunun tek bir kelimede olmasi icin tirnaklarla sariyoruz.
+        # We wrap the MCI file path in quotes to ensure it's treated as a single word.
         cmd = f'open "{self.path}" type mpegvideo alias {self.alias}'
         err = _mciSendString(cmd, None, 0, None)
         if err != 0:
@@ -238,13 +248,13 @@ class SoundManager:
 
     def _start_afplay(self, path: Path, volume: float):
         if not _HAS_WINMM:
-            raise RuntimeError("winmm yuklenemedi")
+            raise RuntimeError("winmm could not be loaded")
         track = _MciTrack(path, volume)
         if not track.open():
-            raise RuntimeError(f"MCI dosyayi acamadi: {path}")
+            raise RuntimeError(f"MCI could not open file: {path}")
         if not track.play():
             track.close()
-            raise RuntimeError(f"MCI calma baslayamadi: {path}")
+            raise RuntimeError(f"MCI could not start playback: {path}")
         with self._lock:
             self._all_sound_procs.add(track)
         return track
@@ -541,10 +551,10 @@ class JarvisUI:
         self.root.attributes('-topmost', True)
         self.root.lift()
         self.root.focus_force()
-        # macOS window manager bazen geometry'yi override eder, tekrar zorla.
+        # macOS window manager sometimes overrides geometry, force it again.
         for delay in (80, 220, 600, 1200):
             self.root.after(delay, self._force_startup_size)
-        # Birkaç saniye sonra topmost'u kapat (normal davranış)
+        # Close topmost after a few seconds (normal behavior)
         self.root.after(3000, lambda: self.root.attributes('-topmost', False))
 
         self._window_geometry = _geo
@@ -564,7 +574,7 @@ class JarvisUI:
         self.target_halo     = 55.0
         self.last_t          = time.time()
         self.tick            = 0
-        self.rings_spin      = [0.0, 45.0, 90.0, 200.0]  # 4 ayrı halka
+        self.rings_spin      = [0.0, 45.0, 90.0, 200.0]  # 4 separate rings
         self.pulse_r         = []
         self.status_blink    = True
         self._jarvis_state   = "INITIALISING"
@@ -576,11 +586,11 @@ class JarvisUI:
         self._health_display  = ""
         self._health_hide_job = None
         self._weather_card = {
-            "city": "Hatay",
+            "city": "London",
             "primary": "--",
-            "details": ["Hava durumu yükleniyor..."],
+            "details": ["Loading weather..."],
         }
-        self._health_card_lines = ["Vitals yükleniyor..."]
+        self._health_card_lines = ["Loading vitals..."]
         self._panel_focus = ""
         self._panel_focus_until = 0.0
         self._brief_refresh_busy = False
@@ -598,7 +608,7 @@ class JarvisUI:
             "panel_x": 14,
             "panel_y": HDR_H + 10,
             "panel_w": 320,
-            "panel_h": 292,
+            "panel_h": 340,
         }
         self.setup_frame = None
         self.api_entry = None
@@ -631,7 +641,7 @@ class JarvisUI:
         self.typing_queue = deque()
         self.is_typing    = False
 
-        # ── Partiküller (arka plan, az sayıda) ───────────────────────────────
+        # ── Particles (background, small number) ───────────────────────────────
         self.particles = [
             {
                 'x':  random.uniform(0, self.W),
@@ -698,10 +708,11 @@ class JarvisUI:
         self._build_sfx_button(self._settings_body)
         self._build_api_button(self._settings_body)
         self._build_fx_slider(self._settings_body)
+        self._build_color_button(self._settings_body)
         self._layout_settings_controls()
         self._place_layout_widgets()
 
-        # Orb tıklama = pause/resume
+        # Orb click = pause/resume
         self.bg.bind("<Button-1>", self._on_canvas_click)
 
         self.root.bind("<F4>",        lambda e: self._toggle_mute())
@@ -812,7 +823,7 @@ class JarvisUI:
         except Exception:
             return "Charon"
 
-    # ── Shutdown button (sağ alt, büyük) ────────────────────────────────────
+    # ── Shutdown button (bottom right, large) ────────────────────────────────
     def _build_shutdown_button(self):
         BW, BH = 140, 36
         self._shutdown_canvas = tk.Canvas(
@@ -825,7 +836,7 @@ class JarvisUI:
         c = self._shutdown_canvas
         BW, BH = 140, 36
         c.delete("all")
-        # Köşe braket stili
+        # Corner bracket style
         bl = 8
         for bx, by, sx, sy in [(0, 0, 1, 1), (BW, 0, -1, 1),
                                 (0, BH, 1, -1), (BW, BH, -1, -1)]:
@@ -986,6 +997,7 @@ class JarvisUI:
         self._volume_scale.place(x=0, y=136, width=inner_w, height=26)
         self._voice_label.place(x=0, y=178)
         self._voice_menu.place(x=88, y=172, width=inner_w - 88, height=30)
+        self._color_canvas.place(x=0, y=210)
 
     def _refresh_settings_status(self):
         if not hasattr(self, "_settings_status_primary"):
@@ -996,14 +1008,14 @@ class JarvisUI:
         yt_handle = str(cfg.get("youtube_channel_handle", "") or "").strip()
 
         primary = [
-            "Gemini hazir" if gemini_ready else "Gemini API eksik",
-            "YouTube hazir" if yt_key_ready and yt_handle else "YouTube ayari eksik",
+            "Gemini ready" if gemini_ready else "Gemini API missing",
+            "YouTube ready" if yt_key_ready and yt_handle else "YouTube config missing",
         ]
         if yt_handle:
             handle_text = yt_handle
         else:
-            handle_text = "@handle girilmedi"
-        secondary = f"Kanal: {handle_text}"
+            handle_text = "@handle not set"
+        secondary = f"Channel: {handle_text}"
 
         self._settings_status_primary.configure(text="  ·  ".join(primary))
         self._settings_status_secondary.configure(text=secondary)
@@ -1026,7 +1038,7 @@ class JarvisUI:
         self._debug_text.configure(state="normal")
         self._debug_text.delete("1.0", tk.END)
         if not self._debug_entries:
-            self._debug_text.insert(tk.END, "Henüz not edilebilir hata yok.\n", "info")
+            self._debug_text.insert(tk.END, "No notable errors yet.\n", "info")
         else:
             for level, line in self._debug_entries:
                 tag = "err" if level == "ERROR" else "warn" if level == "WARN" else "info"
@@ -1092,6 +1104,77 @@ class JarvisUI:
             return
         self._volume_label.configure(text=f"FX LEVEL  {volume}%")
         self.sound.set_volume(volume / 100.0)
+
+    # ── Color picker ───────────────────────────────────────────────────────────
+    def _build_color_button(self, parent=None):
+        parent = parent or self.root
+        bw, bh = 154, 28
+        self._color_canvas = tk.Canvas(
+            parent, width=bw, height=bh,
+            bg=parent.cget("bg"), highlightthickness=0, cursor="hand2")
+        self._color_canvas.bind("<Button-1>", lambda e: self._pick_primary_color())
+        self._draw_color_button()
+
+    def _draw_color_button(self):
+        c = self._color_canvas
+        bw = int(c["width"])
+        bh = int(c["height"])
+        c.delete("all")
+        bl = 6
+        for bx, by, sx, sy in [(0, 0, 1, 1), (bw, 0, -1, 1), (0, bh, 1, -1), (bw, bh, -1, -1)]:
+            c.create_line(bx, by, bx + sx * bl, by, fill=C_PRI, width=1)
+            c.create_line(bx, by, bx, by + sy * bl, fill=C_PRI, width=1)
+        # Color swatch dot
+        c.create_oval(10, 7, 10 + 14, 7 + 14, fill=C_PRI, outline="")
+        c.create_text(bw // 2 + 4, bh // 2, text="CHANGE COLOR",
+                      fill=C_PRI, font=font_body_bold(10))
+
+    def _pick_primary_color(self):
+        global C_PRI
+        initial = C_PRI
+        result = colorchooser.askcolor(title="Choose Primary Color", initialcolor=initial)
+        if result and result[1]:
+            new_color = result[1]
+            C_PRI = new_color
+            save_app_config({"primary_color": new_color})
+            self._update_ui_colors()
+
+    def _update_ui_colors(self):
+        """Refresh all UI elements that use C_PRI."""
+        # Update log text tag
+        self.log_text.tag_config("ai", foreground=C_PRI)
+        # Update settings button
+        self._draw_settings_button()
+        # Update settings tabs
+        self._draw_settings_tabs()
+        # Update settings title
+        if hasattr(self, "_settings_title"):
+            self._settings_title.configure(fg=C_PRI)
+        # Update color button
+        self._draw_color_button()
+        # Update voice menu
+        if hasattr(self, "_voice_menu"):
+            self._voice_menu.config(fg=C_PRI)
+            self._voice_menu["menu"].config(fg=C_PRI)
+        # Update volume label
+        if hasattr(self, "_volume_label"):
+            self._volume_label.configure(fg=C_PRI)
+        # Update SFX button
+        self._draw_sfx_button()
+        # Update mini window chat tag
+        if hasattr(self, "_mini_chat_text"):
+            try:
+                self._mini_chat_text.tag_configure("ai", foreground=C_PRI)
+            except tk.TclError:
+                pass
+        # Update mini window state label
+        if hasattr(self, "_mini_state_lbl"):
+            try:
+                self._mini_state_lbl.configure(fg=self._state_color(self._jarvis_state))
+            except tk.TclError:
+                pass
+        # Force redraw of main canvas
+        self._draw()
 
     def _play_startup_sfx_once(self):
         pass
@@ -1224,14 +1307,14 @@ class JarvisUI:
         self.muted = not self.muted
         self._draw_mute_button()
         if self.muted:
-            self.write_log("SYS: Mikrofon kapatıldı.")
+            self.write_log("SYS: Microphone muted.")
         else:
-            self.write_log("SYS: Mikrofon açık.")
+            self.write_log("SYS: Microphone unmuted.")
         self._sync_sound_state()
         if hasattr(self, "_mini_refresh_mute_btn"):
             self._mini_refresh_mute_btn()
 
-    # ── Orb tıklama = pause ──────────────────────────────────────────────────
+    # ── Orb click = pause ──────────────────────────────────────────────────
     def _on_canvas_click(self, event):
         dx = event.x - self.FCX
         dy = event.y - self.FCY
@@ -1243,17 +1326,17 @@ class JarvisUI:
         self._draw_pause_button()
         if self.paused:
             self.set_state("PAUSED")
-            self.write_log("SYS: JARVIS duraklatıldı.")
+            self.write_log("SYS: JARVIS paused.")
         else:
             self.set_state("THINKING")
-            self.write_log("SYS: JARVIS devam ediyor...")
+            self.write_log("SYS: JARVIS resuming...")
         self._sync_sound_state()
         if self.on_pause_toggle:
             threading.Thread(target=self.on_pause_toggle, args=(self.paused,), daemon=True).start()
 
     def _shutdown(self):
         self.sound.stop_all()
-        self.write_log("SYS: JARVIS kapatılıyor...")
+        self.write_log("SYS: JARVIS shutting down...")
         self.root.after(380, os._exit, 0)
 
     def _toggle_fullscreen(self):
@@ -1295,7 +1378,7 @@ class JarvisUI:
         MINI_ACCENT = C_DIM
         MINI_MUTED = "#3a8a82"
         MINI_SOFT = "#072020"
-        # Glyph-safe fontlar (Windows'ta her zaman var)
+        # Glyph-safe fonts (always present on Windows)
         ICON_FONT = "Segoe UI Symbol"
         EMOJI_FONT = "Segoe UI Emoji"
 
@@ -1375,7 +1458,7 @@ class JarvisUI:
 
         # ── Last message line ────────────────────────────────────────────
         log_lbl = tk.Label(
-            outer, text="JARVIS hazır.",
+            outer, text="JARVIS ready.",
             fg=MINI_MUTED, bg=MINI_BG,
             font=font_body(9),
             anchor="w", justify="left", wraplength=MW - 28)
@@ -1488,9 +1571,9 @@ class JarvisUI:
                 return
             entry_var.set("")
             if self.paused:
-                self.write_log("SYS: JARVIS duraklatılmış durumda.")
+                self.write_log("SYS: JARVIS is paused.")
                 return
-            if text.lower() in ("sus", "dur", "stop", "sessiz", "kes"):
+            if text.lower() in ("stop", "suspend", "silence", "shut", "cease"):
                 self._mini_stop_voice()
                 return
             if self.on_text_command:
@@ -1530,7 +1613,7 @@ class JarvisUI:
             self._toggle_mini_window()
 
     def _mini_stop_voice(self):
-        self.write_log("SYS: ⏹ Ses kesildi.")
+        self.write_log("SYS: ⏹ Voice stopped.")
         if self.on_stop_command:
             threading.Thread(target=self.on_stop_command,
                              daemon=True).start()
@@ -1556,7 +1639,7 @@ class JarvisUI:
             pass
 
     def _mini_refresh_mute_btn(self):
-        """Mic ikonunu mute durumuna göre günceller."""
+        """Update mic icon based on mute state."""
         if not getattr(self, "_mini_mute_btn", None):
             return
         try:
@@ -1819,7 +1902,7 @@ class JarvisUI:
         try:
             tag = self._mini_classify(text)
             stripped = text
-            for prefix in ("SYS:", "ERR:", "JARVIS:", "Siz:", "You:"):
+            for prefix in ("SYS:", "ERR:", "JARVIS:", "You:"):
                 if stripped.startswith(prefix):
                     stripped = stripped[len(prefix):].strip()
                     break
@@ -1929,11 +2012,11 @@ class JarvisUI:
         if not text:
             return
         if self.paused:
-            self.write_log("SYS: JARVIS duraklatılmış durumda. Devam etmek için pause'u kapat.")
+            self.write_log("SYS: JARVIS is paused. Unpause to continue.")
             return
         self._input_var.set("")
-        if text.lower() in ("sus", "dur", "stop", "sessiz", "kes"):
-            self.write_log("SYS: ⏹ Ses kesildi.")
+        if text.lower() in ("stop", "suspend", "silence", "shut", "cease"):
+            self.write_log("SYS: ⏹ Voice stopped.")
             if self.on_stop_command:
                 threading.Thread(target=self.on_stop_command, daemon=True).start()
             return
@@ -2004,7 +2087,7 @@ class JarvisUI:
         if hasattr(self, "_mini_window"):
             self._update_mini_log(text)
         tl = text.lower()
-        if tl.startswith("siz:") or tl.startswith("you:"):
+        if tl.startswith("you:"):
             self.mark_user_activity(True)
             self.set_state("THINKING")
         elif tl.startswith("err:") or "error" in tl:
@@ -2025,7 +2108,7 @@ class JarvisUI:
         self.is_typing = True
         text = self.typing_queue.popleft()
         tl   = text.lower()
-        if   tl.startswith("siz:") or tl.startswith("you:"):   tag = "you"
+        if   tl.startswith("you:"):   tag = "you"
         elif tl.startswith("jarvis:") or tl.startswith("ai:"): tag = "ai"
         elif tl.startswith("err:") or "error" in tl:           tag = "err"
         else:                                                    tag = "sys"
@@ -2131,7 +2214,7 @@ class JarvisUI:
         self._draw()
         self.root.after(33, self._animate)
 
-    # ── Yardımcı ─────────────────────────────────────────────────────────────
+    # ── Helper ─────────────────────────────────────────────────────────────
     @staticmethod
     def _ac(r, g, b, a):
         f = max(0, min(255, int(a))) / 255.0
@@ -2146,38 +2229,38 @@ class JarvisUI:
         raw = (text or "").strip()
         if not raw:
             return []
-        raw = raw.replace(" ve ", ", ")
+        raw = raw.replace(" and ", ", ")
         parts = [part.strip(" .") for part in raw.split(",") if part.strip()]
         return parts[:limit]
 
     def _parse_weather_card(self, text: str) -> dict:
-        if not text or "alınamadı" in text.lower() or "alınamadi" in text.lower():
+        if not text or "unavailable" in text.lower() or "unavailable" in text.lower():
             return {
-                "city": "Hatay",
+                "city": "London",
                 "primary": "--",
-                "details": ["Hava durumu alınamadı."],
+                "details": ["Weather data unavailable."],
             }
 
         prefix, _, body = text.partition(":")
-        city = "Hatay"
-        if " için" in prefix:
-            city = prefix.split(" için", 1)[0].strip().title()
+        city = "London"
+        if " for" in prefix:
+            city = prefix.split(" for", 1)[0].strip().title()
 
         details = [part.strip(" .") for part in body.split(",") if part.strip()]
         primary = "--"
         if details:
-            primary = details[0].replace(" derece", "°C")
+            primary = details[0].replace("°C", "°C")
         return {
             "city": city,
             "primary": primary,
-            "details": details[1:4] or ["Anlık veri hazır."],
+            "details": details[1:4] or ["Live data ready."],
         }
 
     def _parse_health_card(self, text: str) -> list[str]:
-        if not text or "alınamadı" in text.lower() or "alınamadi" in text.lower():
-            return ["Sağlık verisi alınamadı."]
+        if not text or "unavailable" in text.lower() or "unavailable" in text.lower():
+            return ["Health data unavailable."]
         lines = self._split_summary_lines(text, limit=4)
-        return lines or ["Sağlık özeti hazır değil."]
+        return lines or ["Health summary not ready."]
 
     def _kick_brief_refresh(self):
         if self._brief_refresh_busy:
@@ -2188,18 +2271,18 @@ class JarvisUI:
     def _refresh_brief_cards(self):
         try:
             try:
-                weather = get_weather_summary("Hatay")
+                weather = get_weather_summary("London")
                 self._weather_card = self._parse_weather_card(weather)
             except Exception:
                 self._weather_card = {
-                    "city": "Hatay",
+                    "city": "London",
                     "primary": "--",
-                    "details": ["Hava durumu alınamadı."],
+                    "details": ["Weather data unavailable."],
                 }
             try:
                 self._health_card_lines = get_health_card_lines()
             except Exception:
-                self._health_card_lines = ["Sağlık verisi alınamadı."]
+                self._health_card_lines = ["Health data unavailable."]
         finally:
             self._brief_refresh_busy = False
 
@@ -2258,7 +2341,7 @@ class JarvisUI:
         pulse = 0.65 + 0.35 * math.sin(self.tick * 0.12)
         return min(1.0, remaining / 4.0) * pulse
 
-    # ── Health overlay (sol panel) ────────────────────────────────────────────
+    # ── Health overlay (left panel) ────────────────────────────────────────────
     def show_health_hologram(self, query: str, data_str: str):
         def _show():
             self._health_visible = True
@@ -2312,7 +2395,7 @@ class JarvisUI:
                               font=font_body(9), anchor="w")
                 ly += 17
 
-    # ── Sol panel ─────────────────────────────────────────────────────────────
+    # ── Left panel ─────────────────────────────────────────────────────────────
     def _draw_left_panel(self, c):
         if self._health_visible:
             self._draw_health_overlay(c)
@@ -2329,7 +2412,7 @@ class JarvisUI:
 
         cards = [
             ("time", 0.22, "TIME", C_GOLD),
-            ("weather", 0.20, "WEATHER · Hatay", C_BLUE),
+            ("weather", 0.20, "WEATHER · London", C_BLUE),
             ("system", 0.28, "SYSTEM STATUS", C_PRI),
             ("health", 0.30, "HEALTH SUMMARY", C_GREEN),
         ]
@@ -2422,7 +2505,7 @@ class JarvisUI:
         self._card_focus_boost = 0.0
         self._card_dimmed = False
 
-    # ── Sağ panel ─────────────────────────────────────────────────────────────
+    # ── Right panel ─────────────────────────────────────────────────────────────
     def _draw_right_panel(self, c):
         x0  = self.CHAT_PANEL_X
         y0  = self.CHAT_PANEL_Y
@@ -2444,7 +2527,7 @@ class JarvisUI:
                       font=font_body_bold(10), anchor="e")
         c.create_line(x0+pad, y0+28, x0+pw-pad, y0+28, fill=C_DIM)
 
-    # ── ORB (ana çizim) ───────────────────────────────────────────────────────
+    # ── ORB (main drawing) ───────────────────────────────────────────────────────
     def _draw_orb(self, c):
         state = "PAUSED" if self.paused else self._jarvis_state
         t    = self.tick
@@ -2619,7 +2702,7 @@ class JarvisUI:
                 outline="",
             )
 
-    # ── Ana çizim ─────────────────────────────────────────────────────────────
+    # ── Main drawing ─────────────────────────────────────────────────────────────
     def _draw(self):
         c  = self.bg
         W  = self.W
@@ -2627,20 +2710,20 @@ class JarvisUI:
         t  = self.tick
         c.delete("all")
 
-        # ── Arka plan ────────────────────────────────────────────────────────
-        # Nokta ızgarası — çok ince
+        # ── Background ────────────────────────────────────────────────────────
+        # Dot grid — very subtle
         step = 48
         for x in range(0, W, step):
             for y in range(0, H, step):
                 c.create_rectangle(x, y, x+1, y+1, fill=C_DIMMER, outline="")
 
-        # Tarama çizgisi (yavaş, çok soluk)
+        # Scan line (slow, very faint)
         scan_y = (t * 0.7) % (H + 60) - 30
         for i in range(2):
             ly = (scan_y + i * 20) % H
             c.create_line(0, ly, W, ly+35, fill="#081818", width=1)
 
-        # Partiküller
+        # Particles
         R, G, B = self._orb_rgb()
         for p in self.particles:
             if self.speaking:
@@ -2651,13 +2734,13 @@ class JarvisUI:
             c.create_oval(p['x']-r, p['y']-r, p['x']+r, p['y']+r,
                           fill=col, outline="")
 
-        # ── Bölücü çizgiler (ince, soluk) ────────────────────────────────────
+        # ── Divider lines (thin, faint) ────────────────────────────────────
         c.create_line(self.LEFT_W, HDR_H, self.LEFT_W, H-FOOTER_H,
                       fill=C_DIM, width=1)
         c.create_line(W-self.RIGHT_W, HDR_H, W-self.RIGHT_W, H-FOOTER_H,
                       fill=C_DIM, width=1)
 
-        # ── Yan paneller ──────────────────────────────────────────────────────
+        # ── Side panels ──────────────────────────────────────────────────────
         self._draw_left_panel(c)
         self._draw_right_panel(c)
 
@@ -2673,24 +2756,24 @@ class JarvisUI:
 
         # ── HEADER ───────────────────────────────────────────────────────────
         c.create_rectangle(0, 0, W, HDR_H, fill="#010a0a", outline="")
-        # Alt çizgi — teal parlak
+        # Bottom line — bright teal
         c.create_line(0, HDR_H, W, HDR_H, fill=C_MID, width=1)
         for i in range(3):
             a = 60 - i * 18
             c.create_line(0, HDR_H-1-i, W, HDR_H-1-i,
                           fill=self._ac(0, 180, 165, a), width=1)
 
-        # Büyük başlık
+        # Large title
         draw_text_glow(c, W//2, 24, text=SYSTEM_NAME,
                        fill=C_PRI, glow_color=C_MID, font=font_display(26))
         c.create_text(W//2, 52, text="Just A Rather Very Intelligent System",
                       fill=C_MID, font=font_body(11))
 
-        # Sol: model badge
+        # Left: model badge
         c.create_text(22, 36, text=MODEL_BADGE,
                       fill=C_DIM, font=font_body(10), anchor="w")
 
-        # Sağ: durum indikatörü
+        # Right: status indicator
         indicator_state = "PAUSED" if self.paused else self._jarvis_state
         ind_col = self._state_color(indicator_state)
         indicator_text = self._state_badge_text(indicator_state)
@@ -2721,15 +2804,15 @@ class JarvisUI:
         self.setup_frame.place(relx=0.5, rely=0.5, anchor="center", width=setup_w, height=setup_h)
         self.setup_frame.pack_propagate(False)
 
-        title = "◈ API AYARLARI" if edit_mode else "◈ İLK KURULUM GEREKLİ"
+        title = "◈ API SETTINGS" if edit_mode else "◈ INITIAL SETUP REQUIRED"
         subtitle = (
-            "Backend seç ve ayarları güncelle."
+            "Select backend and update settings."
             if edit_mode else
-            "Gemini Cloud veya LM Studio (yerel) seç. LM Studio için API anahtarı gerekmez."
+            "Choose Gemini Cloud or LM Studio (local). LM Studio does not require an API key."
         )
         config = load_app_config()
 
-        # ── Backend secimi ───────────────────────────────────────────────────
+        # ── Backend selection ───────────────────────────────────────────────────
         tk.Label(self.setup_frame, text="BACKEND",
                  fg=C_DIM, bg="#00080d", font=font_body(12)).pack(pady=(18, 4))
         self._backend_var = tk.StringVar(value=str(config.get("backend", "gemini")))
@@ -2739,7 +2822,7 @@ class JarvisUI:
                        value="gemini", fg=C_TEXT, bg="#00080d",
                        activebackground="#00080d", selectcolor="#001a1a",
                        font=font_body(12)).pack(side="left", padx=12)
-        tk.Radiobutton(backend_row, text="LM Studio (Yerel)", variable=self._backend_var,
+        tk.Radiobutton(backend_row, text="LM Studio (Local)", variable=self._backend_var,
                        value="lmstudio", fg=C_TEXT, bg="#00080d",
                        activebackground="#00080d", selectcolor="#001a1a",
                        font=font_body(12)).pack(side="left", padx=12)
@@ -2785,8 +2868,8 @@ class JarvisUI:
         if current_handle:
             self.youtube_handle_entry.insert(0, current_handle)
 
-        # ── LM Studio (yerel) ayarlari ───────────────────────────────────────
-        tk.Label(self.setup_frame, text="LM STUDIO URL  (yerel mod)",
+        # ── LM Studio (local) settings ───────────────────────────────────────
+        tk.Label(self.setup_frame, text="LM STUDIO URL  (local mode)",
                  fg=C_DIM, bg="#00080d", font=font_body(12)).pack(pady=(10, 4))
         self.lmstudio_url_entry = tk.Entry(
             self.setup_frame, width=60,
@@ -2807,13 +2890,13 @@ class JarvisUI:
         buttons = tk.Frame(self.setup_frame, bg="#00080d")
         buttons.pack(pady=14)
 
-        tk.Button(buttons, text="▸ KAYDET",
+        tk.Button(buttons, text="▸ SAVE",
                   command=self._save_api_key, bg=C_BG, fg=C_PRI,
                   activebackground="#003344", font=font_body_bold(13),
                   borderwidth=0, padx=24, pady=10).pack(side="left", padx=8)
 
         if edit_mode:
-            tk.Button(buttons, text="KAPAT",
+            tk.Button(buttons, text="CLOSE",
                       command=self._close_setup_ui, bg="#08111a", fg=C_DIM,
                       activebackground="#10202b", font=font_body_bold(13),
                       borderwidth=0, padx=24, pady=10).pack(side="left", padx=8)
@@ -2823,7 +2906,7 @@ class JarvisUI:
         backend = getattr(self, "_backend_var", None)
         backend_val = backend.get() if backend else "gemini"
         key = self.api_entry.get().strip() if self.api_entry else ""
-        # Gemini modunda anahtar zorunlu; LM Studio modunda degil.
+        # API key required in Gemini mode; not required in LM Studio mode.
         if backend_val == "gemini" and not key:
             return
 
@@ -2853,7 +2936,7 @@ class JarvisUI:
         self._api_key_ready = True
         self._refresh_settings_status()
         if was_ready:
-            self.write_log("SYS: API ayarlari guncellendi.")
+            self.write_log("SYS: API settings updated.")
         else:
             self.set_state("LISTENING")
-            self.write_log("SYS: JARVIS hazır. Dinliyorum...")
+            self.write_log("SYS: JARVIS ready. Listening...")
