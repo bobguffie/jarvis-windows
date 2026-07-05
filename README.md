@@ -136,10 +136,11 @@ This branch introduces major new capabilities over the original v1 Linux port:
 - Sentence splitting with per-sentence WAV rendering via `--output_file`, eliminating audio crackles caused by raw PCM streaming conflicts between STT and TTS
 
 ### 📊 Dynamic Workspace Card
-- **Live Contextual Media Tracker**: automatically detects and displays currently playing media from any MPRIS-compatible player (VLC, Spotify, Chrome, Brave, etc.) using `playerctl` system bus scanning
-- **Shared Network To-Do List**: reads from `/media/medion/Jarvis-shared/todo.txt` — a network-mounted shared checklist accessible across machines
+- **Live Contextual Media Tracker**: automatically detects and displays currently playing media from any MPRIS-compatible player (VLC, Spotify, Chrome, Brave, etc.) using `playerctl` system bus scanning — no window focus required
+- **Shared To-Do List** with smart path detection: defaults to `memory/todo.txt` (local, inside the repo) — works instantly on any machine. If a network-mounted share is detected at `/media/medion/Jarvis-shared/todo.txt`, it uses that instead for multi-machine access
 - **Smart Auto-Switching**: when the workspace is in "media" mode and all media players remain idle/stopped for 10+ seconds, the card automatically reverts to the to-do list view
 - **Active Playback Priority**: if any player is "Playing" or "Paused", the idle timer resets — no unwanted tab switching while you're paused mid-video
+- **Custom path**: to point the to-do list at your own network share, open `actions/workspace.py` and change the `_NETWORK_TODO` variable at the top of the file
 
 ### 🌤️ Hyper-Local Weather
 - Switched to the **Open-Meteo API** using high-resolution Met Office models for Grantham, UK

@@ -2,7 +2,7 @@
 Workspace — Dynamic workspace card for JARVIS.
 Provides a hot-swappable dashboard section that displays either:
   - Currently playing media (MPRIS via playerctl, global bus scan)
-  - Shared network to-do list (/media/medion/Jarvis-shared/todo.txt)
+  - Shared network to-do list (local or network path, auto-detected)
 
 Media tab auto-switches back to "todo" when all players are idle/stopped for >10s.
 """
@@ -15,7 +15,14 @@ import subprocess
 from pathlib import Path
 
 
-TODO_PATH = Path("/media/medion/Jarvis-shared/todo.txt")
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Smart todo path: use the network share if it exists, otherwise fall back to
+# a local file inside the repository so it works out of the box on any machine.
+_NETWORK_TODO = Path("/media/medion/Jarvis-shared/todo.txt")
+_LOCAL_TODO   = BASE_DIR / "memory" / "todo.txt"
+
+TODO_PATH = _NETWORK_TODO if _NETWORK_TODO.exists() else _LOCAL_TODO
 
 # ── Idle tracking ────────────────────────────────────────────────────────────
 _media_last_active_time: float | None = None  # last time we saw a Playing player
