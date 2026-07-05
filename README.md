@@ -42,7 +42,7 @@ JARVIS is a real-time voice AI assistant developed for the **Linux desktop envir
 
 It communicates with the user via voice, processes voice commands in real time, and executes real actions on Linux through 16+ integrated tools — including Bash shell integration, Piper TTS voice output, application launching via `xdg-open`, screen capture with `scrot`, and media control via `playerctl`.
 
-> **Original project:** Forked from [bnsware/jarvis-windows](https://github.com/bnsware/jarvis-windows) — completely ported from Windows to Linux.
+> **Project lineage:** [bnsware/jarvis-windows](https://github.com/bnsware/jarvis-windows) (Turkish original) → [bobguffie/jarvis-windows-english](https://github.com/bobguffie/jarvis-windows-english) (English translation) → **jarvis-linux-english** (Linux port)
 
 ---
 
