@@ -2,6 +2,8 @@
 
 # 🤖 J.A.R.V.I.S — Linux AI Assistant
 
+**Version 2.0 (GPU & Workspace Edition)**
+
 <p><strong>A voice-enabled Linux desktop assistant powered by Gemini Live API or local LM Studio</strong></p>
 
 <p align="center">
@@ -12,6 +14,8 @@
 ![Platform](https://img.shields.io/badge/Platform-Linux-FCC624?style=for-the-badge&logo=linux&logoColor=white)
 ![Gemini](https://img.shields.io/badge/Powered%20by-Gemini%202.5%20Flash-orange?style=for-the-badge&logo=google&logoColor=white)
 ![TTS](https://img.shields.io/badge/TTS-Piper%20Voice-00cc66?style=for-the-badge&logo=voice&logoColor=white)
+![GPU](https://img.shields.io/badge/GPU-CUDA%20Accelerated-76B900?style=for-the-badge&logo=nvidia&logoColor=white)
+![Version](https://img.shields.io/badge/Version-2.0-ff6600?style=for-the-badge)
 
 </div>
 
@@ -118,6 +122,40 @@ All Windows-specific modules have been replaced with Linux-native alternatives (
 - All action modules (weather, browser, media, etc.) have been reviewed for English consistency
 - Cleaned up Turkish comments and variable names throughout the codebase
 - Added `translate_ui.py` helper script for future translation maintenance
+
+---
+
+## 🚀 Version 2.0 Features
+
+This branch introduces major new capabilities over the original v1 Linux port:
+
+### 🎮 NVIDIA GPU Acceleration
+- Built-in local neural voice synthesis using **Piper TTS** powered by **CUDA cores** on NVIDIA GPUs
+- Automatic hardware detection: runs `nvidia-smi` on startup — if an NVIDIA GPU is found and Piper has CUDA support, `--use-cuda` is appended to the inference flags
+- **Seamless CPU fallback**: if no GPU is detected or CUDA libraries are unavailable, the engine falls back to standard CPU execution with zero configuration changes
+- Sentence splitting with per-sentence WAV rendering via `--output_file`, eliminating audio crackles caused by raw PCM streaming conflicts between STT and TTS
+
+### 📊 Dynamic Workspace Card
+- **Live Contextual Media Tracker**: automatically detects and displays currently playing media from any MPRIS-compatible player (VLC, Spotify, Chrome, Brave, etc.) using `playerctl` system bus scanning
+- **Shared Network To-Do List**: reads from `/media/medion/Jarvis-shared/todo.txt` — a network-mounted shared checklist accessible across machines
+- **Smart Auto-Switching**: when the workspace is in "media" mode and all media players remain idle/stopped for 10+ seconds, the card automatically reverts to the to-do list view
+- **Active Playback Priority**: if any player is "Playing" or "Paused", the idle timer resets — no unwanted tab switching while you're paused mid-video
+
+### 🌤️ Hyper-Local Weather
+- Switched to the **Open-Meteo API** using high-resolution Met Office models for Grantham, UK
+- Support for current conditions, tomorrow's forecast, and **10-day weather outlook**
+- Each sentence is split into separate bullet points for clean card rendering
+
+### 🎤 New Voice Commands
+
+```
+"Switch workspace to media player"    → Shows now-playing media tracker
+"Switch workspace to checklist"      → Shows shared network to-do list
+"Refresh workspace"                   → Force-refreshes workspace card data immediately
+"Give me the 10-day weather outlook"  → Extended weather forecast
+"What's playing?"                     → Shows currently playing media on the workspace card
+"Show my to-do list"                  → Switches workspace to checklist view
+```
 
 ---
 
