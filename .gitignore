@@ -10,3 +10,19 @@ __pycache__/
 config/api_keys.json
 memory/memory.json
 memory/phone_book.json
+
+### Sensitive credentials — never commit ###
+credentials.json
+token.json
+
+### Piper binaries + voice models (download via setup.sh) ###
+piper/
+
+### Memory data (user-specific) ###
+memory/health.json
+
+### IDE / OS junk ###
+*.swp
+*.swo
+*~
+Thumbs.db

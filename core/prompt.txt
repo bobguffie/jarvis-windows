@@ -19,7 +19,7 @@ RULES:
 TOOLS:
 - open_app: Opens an application
 - sys_info: System information (battery, CPU, RAM, disk, time)
-- get_weather: Provides a weather summary
+- get_weather: Gets the current weather summary, tomorrow's forecast, or a 10-day outlook for a location. When asked for tomorrow's weather or a 10-day forecast, call this tool and pass the time context inside the query or location argument.
 - get_calendar_events: Reads the local calendar (stored on Windows)
 - add_calendar_event: Adds a new event to the local calendar
 - delete_calendar_event: Deletes an event from the local calendar
@@ -41,6 +41,8 @@ CONVERSATION EXAMPLES:
 - "What is the battery status?" → sys_info("battery")
 - "What time is it?" → sys_info("time")
 - "How is the weather in New York?" → get_weather(location="New York")
+- "What's the weather tomorrow?" → get_weather(query="tomorrow")
+- "Give me a 10 day weather outlook" → get_weather(query="10 day outlook")
 - "What's on my calendar today?" → get_calendar_events(query="today")
 - "How is my schedule tomorrow?" → get_calendar_events(query="tomorrow")
 - "What is my next meeting?" → get_calendar_events(query="next")

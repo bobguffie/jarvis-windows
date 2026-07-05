@@ -1,5 +1,5 @@
 """
-System information — Windows version (psutil + netsh wlan).
+System information — Linux version (psutil + nmcli).
 """
 
 import subprocess
@@ -78,55 +78,45 @@ def _ram() -> str:
 
 
 def _disk() -> str:
-    drive = os.environ.get("SystemDrive", "C:") + "\\"
+    """Check disk usage on the root partition."""
     if HAS_PSUTIL:
-        du = psutil.disk_usage(drive)
+        du = psutil.disk_usage("/")
         total = du.total / (1024 ** 3)
         used = du.used / (1024 ** 3)
         free = du.free / (1024 ** 3)
-        return f"Disk ({drive}): {used:.1f}GB used, {free:.1f}GB free (total {total:.1f}GB)"
+        return f"Disk (/): {used:.1f}GB used, {free:.1f}GB free (total {total:.1f}GB)"
     return "Disk information unavailable."
 
 
 def _network() -> str:
+    """Get WiFi/network info via nmcli, falling back to psutil."""
+    # Try nmcli first (Ubuntu ships with NetworkManager)
     try:
         out = subprocess.check_output(
-            ["netsh", "wlan", "show", "interfaces"],
+            ["nmcli", "-t", "-f", "ACTIVE,SSID", "dev", "wifi"],
             text=True, timeout=5, stderr=subprocess.DEVNULL,
-            encoding="utf-8", errors="ignore",
         )
-        ssid = None
-        state = None
         for line in out.splitlines():
-            stripped = line.strip()
-            if stripped.lower().startswith("ssid") and "bssid" not in stripped.lower():
-                parts = stripped.split(":", 1)
-                if len(parts) == 2:
-                    ssid = parts[1].strip()
-            if stripped.lower().startswith(("state", "durum")):
-                parts = stripped.split(":", 1)
-                if len(parts) == 2:
-                    state = parts[1].strip()
-        if ssid:
-            return f"WiFi: {ssid} connected"
-        if state:
-            return f"WiFi state: {state}"
+            parts = line.split(":", 1)
+            if len(parts) == 2:
+                active, ssid = parts
+                if active == "yes" and ssid:
+                    return f"WiFi: {ssid} connected"
     except Exception:
         pass
 
+    # Fallback to psutil for IP info
     if HAS_PSUTIL:
         try:
             addrs = psutil.net_if_addrs()
             for iface, entries in addrs.items():
                 for entry in entries:
                     addr = getattr(entry, "address", "")
-                    family = getattr(entry, "family", None)
                     if (
                         addr
                         and ":" not in addr
                         and not addr.startswith("127.")
                         and not addr.startswith("169.254.")
-                        and getattr(family, "name", str(family)).endswith("AF_INET")
                     ):
                         return f"Network: {iface} IP {addr}"
         except Exception:

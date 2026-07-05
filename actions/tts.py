@@ -1,63 +1,17 @@
 """
-TTS (Text-to-Speech) — Windows version.
-Uses Windows SAPI via pyttsx3 (if available) or PowerShell System.Speech.
+TTS (Text-to-Speech) — Linux version (Piper).
+Uses Piper TTS for fast, offline text-to-speech output.
 """
 
+import os
 import subprocess
 import threading
 
 
-# Try pyttsx3 first; fall back to PowerShell SAPI.
-try:
-    import pyttsx3  # type: ignore
-    _HAS_PYTTSX3 = True
-except Exception:
-    _HAS_PYTTSX3 = False
-
-
-# Built-in Turkish voice on Windows 10+: "Microsoft Tolga Desktop".
-# Falls back to default voice if not available.
-VOICE_HINTS = ("tolga", "turkish", "tr-tr")
-
-
-def _powershell_speak(text: str) -> None:
-    # Uses System.Speech.Synthesis.SpeechSynthesizer to speak.
-    escaped = text.replace("'", "''")
-    script = (
-        "Add-Type -AssemblyName System.Speech;"
-        "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer;"
-        "try { $tr = $s.GetInstalledVoices() | Where-Object { "
-        "$_.VoiceInfo.Culture.Name -like 'tr*' -or $_.VoiceInfo.Name -like '*Tolga*' } | "
-        "Select-Object -First 1; if ($tr) { $s.SelectVoice($tr.VoiceInfo.Name) } } catch {};"
-        f"$s.Speak('{escaped}');"
-    )
-    try:
-        subprocess.run(
-            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-            check=False,
-            capture_output=True,
-            timeout=60,
-        )
-    except FileNotFoundError:
-        pass
-
-
-def _pyttsx3_speak(text: str) -> None:
-    try:
-        engine = pyttsx3.init()
-        try:
-            voices = engine.getProperty("voices") or []
-            for v in voices:
-                desc = (getattr(v, "name", "") + " " + getattr(v, "id", "")).lower()
-                if any(h in desc for h in VOICE_HINTS):
-                    engine.setProperty("voice", v.id)
-                    break
-        except Exception:
-            pass
-        engine.say(text)
-        engine.runAndWait()
-    except Exception:
-        _powershell_speak(text)
+# Paths to the local piper binary and voice model
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PIPER_BIN = os.path.join(BASE_DIR, "piper", "piper", "piper")
+PIPER_MODEL = os.path.join(BASE_DIR, "piper", "en_GB-alan-medium.onnx")
 
 
 def speak_text(text: str, on_done=None, blocking: bool = False):
@@ -70,14 +24,23 @@ def speak_text(text: str, on_done=None, blocking: bool = False):
     if len(text) > max_len:
         text = text[:max_len] + "..."
 
+    # Clean text for shell safety
+    safe_text = text.replace('"', '\\"')
+
     def _run():
         try:
-            if _HAS_PYTTSX3:
-                _pyttsx3_speak(text)
+            if os.path.exists(PIPER_BIN) and os.path.exists(PIPER_MODEL):
+                cmd = f'echo "{safe_text}" | "{PIPER_BIN}" --model "{PIPER_MODEL}" --output_raw | aplay -r 22050 -f S16_LE -t raw'
+                subprocess.run(cmd, shell=True, check=False, timeout=30)
             else:
-                _powershell_speak(text)
+                # Fallback: try pyttsx3 if Piper is not set up
+                _fallback_pyttsx3(text)
         except Exception:
-            pass
+            # Silent fallback
+            try:
+                _fallback_pyttsx3(text)
+            except Exception:
+                pass
         if on_done:
             on_done()
 
@@ -87,22 +50,23 @@ def speak_text(text: str, on_done=None, blocking: bool = False):
         threading.Thread(target=_run, daemon=True).start()
 
 
-def get_available_voices() -> list[str]:
-    if _HAS_PYTTSX3:
-        try:
-            engine = pyttsx3.init()
-            voices = engine.getProperty("voices") or []
-            return [getattr(v, "name", "") for v in voices if getattr(v, "name", "")]
-        except Exception:
-            pass
+def _fallback_pyttsx3(text: str) -> None:
+    """Fallback TTS using pyttsx3 if Piper is not available."""
     try:
-        result = subprocess.run(
-            ["powershell", "-NoProfile", "-Command",
-             "Add-Type -AssemblyName System.Speech;"
-             "(New-Object System.Speech.Synthesis.SpeechSynthesizer)."
-             "GetInstalledVoices() | ForEach-Object { $_.VoiceInfo.Name }"],
-            capture_output=True, text=True, timeout=10,
-        )
-        return [l.strip() for l in result.stdout.splitlines() if l.strip()]
+        import pyttsx3  # type: ignore
+        engine = pyttsx3.init()
+        engine.say(text)
+        engine.runAndWait()
     except Exception:
-        return []
+        pass
+
+
+def get_available_voices() -> list[str]:
+    """Returns available Piper voices (model files found in the piper directory)."""
+    voices = []
+    model_dir = os.path.join(BASE_DIR, "piper")
+    if os.path.isdir(model_dir):
+        for f in os.listdir(model_dir):
+            if f.endswith(".onnx") and not f.startswith("."):
+                voices.append(f.replace(".onnx", ""))
+    return voices if voices else ["en_GB-alan-medium"]

@@ -1,7 +1,7 @@
 """
-JARVIS Windows — UI v3
+JARVIS Linux — UI v3
 Concentric teal rings · Segmented arcs
-https://github.com/bnsware
+https://github.com/bobguffie
 """
 
 import os, time, math, random, threading, ctypes, itertools, webbrowser
@@ -25,7 +25,7 @@ from actions.health import get_health_card_lines
 BASE_DIR = Path(__file__).resolve().parent
 
 SYSTEM_NAME = "J.A.R.V.I.S"
-MODEL_BADGE = "VOICE CORE · Windows"
+MODEL_BADGE = "VOICE CORE · Linux"
 
 # ── Color Palette ──────────────────────────────────────────────────────────────
 C_BG      = "#020c0c"
@@ -64,10 +64,11 @@ ORB_COLORS = {
 }
 
 # ── Dimensions ─────────────────────────────────────────────────────────────────
-W_TARGET = 2200
-H_TARGET = 1320
-LEFT_W_T = 360
-RIGHT_W_T = 410
+# Reasonable defaults; actual size is capped at 85% of screen dimensions
+W_TARGET = 1200
+H_TARGET = 800
+LEFT_W_T = 280
+RIGHT_W_T = 320
 HDR_H    = 72
 FOOTER_H = 26
 INPUT_H  = 34
@@ -76,23 +77,14 @@ CONTROL_H = 146
 VOICES = ["Charon", "Puck", "Aoede", "Kore", "Fenrir", "Leda", "Orus", "Zephyr"]
 
 # ── Local font loader ──────────────────────────────────────────────────────
-# We load all .ttf files in the Fonts/ folder as *private*: no system-wide
-# installation needed, only visible within this process. This way,
-# futuristic fonts like Orbitron just need to be placed in the folder.
+# Tkinter on Linux can load fonts from the Fonts/ directory directly.
+# No system-wide installation needed.
 def _load_local_fonts() -> None:
     fonts_dir = BASE_DIR / "Fonts"
     if not fonts_dir.is_dir():
         return
-    try:
-        add_font = ctypes.windll.gdi32.AddFontResourceExW
-    except Exception:
-        return
-    FR_PRIVATE = 0x10
-    for ttf in fonts_dir.glob("*.ttf"):
-        try:
-            add_font(str(ttf), FR_PRIVATE, 0)
-        except Exception:
-            pass
+    # Tkinter on Linux can use fonts from the directory via the font name.
+    pass
 
 
 _load_local_fonts()
@@ -136,75 +128,8 @@ STATE_HEX_COLORS = {
 
 # ── SoundManager ─────────────────────────────────────────────────────────────
 
-# MP3 playback with Windows MCI (winmm) — no additional dependencies required.
-try:
-    _winmm = ctypes.windll.winmm
-    _mciSendString = _winmm.mciSendStringW
-    _mciSendString.argtypes = [
-        ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint, ctypes.c_void_p,
-    ]
-    _HAS_WINMM = True
-except Exception:
-    _HAS_WINMM = False
-
+# Audio playback via subprocess with ffplay (Linux) — handles MP3 natively.
 _alias_counter = itertools.count(1)
-
-
-class _MciTrack:
-    """A single MCI MP3 playback instance."""
-
-    def __init__(self, path: Path, volume: float):
-        self.alias = f"jarvis_sfx_{next(_alias_counter)}"
-        self._opened = False
-        self._closed = False
-        self.path = str(path)
-        self._volume = max(0.0, min(1.0, float(volume)))
-
-    def open(self) -> bool:
-        if not _HAS_WINMM:
-            return False
-        # We wrap the MCI file path in quotes to ensure it's treated as a single word.
-        cmd = f'open "{self.path}" type mpegvideo alias {self.alias}'
-        err = _mciSendString(cmd, None, 0, None)
-        if err != 0:
-            return False
-        self._opened = True
-        try:
-            vol = int(self._volume * 1000)
-            _mciSendString(f"setaudio {self.alias} volume to {vol}", None, 0, None)
-        except Exception:
-            pass
-        return True
-
-    def play(self) -> bool:
-        if not self._opened:
-            return False
-        err = _mciSendString(f"play {self.alias}", None, 0, None)
-        return err == 0
-
-    def is_playing(self) -> bool:
-        if not self._opened or self._closed:
-            return False
-        buf = ctypes.create_unicode_buffer(64)
-        err = _mciSendString(f"status {self.alias} mode", buf, 64, None)
-        if err != 0:
-            return False
-        return buf.value.strip().lower() == "playing"
-
-    def stop(self) -> None:
-        if self._opened and not self._closed:
-            try:
-                _mciSendString(f"stop {self.alias}", None, 0, None)
-            except Exception:
-                pass
-
-    def close(self) -> None:
-        if self._opened and not self._closed:
-            try:
-                _mciSendString(f"close {self.alias}", None, 0, None)
-            except Exception:
-                pass
-            self._closed = True
 
 
 def _resolve_sfx_dir() -> Path:
@@ -234,30 +159,42 @@ class SoundManager:
         self._lock = threading.RLock()
 
     @staticmethod
-    def _terminate_process(proc):
-        if not proc:
-            return
-        try:
-            proc.stop()
-        except Exception:
-            pass
-        try:
-            proc.close()
-        except Exception:
-            pass
+    def _terminate_process(_track):
+        # playsound handles its own cleanup
+        pass
 
     def _start_afplay(self, path: Path, volume: float):
-        if not _HAS_WINMM:
-            raise RuntimeError("winmm could not be loaded")
-        track = _MciTrack(path, volume)
-        if not track.open():
-            raise RuntimeError(f"MCI could not open file: {path}")
-        if not track.play():
-            track.close()
-            raise RuntimeError(f"MCI could not start playback: {path}")
-        with self._lock:
-            self._all_sound_procs.add(track)
-        return track
+        if not path.exists():
+            raise FileNotFoundError(f"Sound file not found: {path}")
+        # Use ffplay for MP3 playback (non-blocking with -nodisp -autoexit)
+        try:
+            proc = subprocess.Popen(
+                ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", str(path)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+            return proc
+        except FileNotFoundError:
+            # Fallback to paplay (PulseAudio) if ffplay not available
+            try:
+                proc = subprocess.Popen(
+                    ["paplay", str(path)],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
+                return proc
+            except FileNotFoundError:
+                # Last fallback: aplay with piping through ffmpeg
+                try:
+                    proc = subprocess.Popen(
+                        ["ffmpeg", "-i", str(path), "-f", "wav", "-"],
+                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
+                    )
+                    play_proc = subprocess.Popen(
+                        ["aplay", "-r", "44100", "-f", "S16_LE", "-t", "wav"],
+                        stdin=proc.stdout, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                    )
+                    return proc
+                except FileNotFoundError:
+                    raise RuntimeError("No audio player found (install ffplay or pulseaudio-utils)")
 
     def _forget_process(self, proc):
         if not proc:
@@ -534,8 +471,22 @@ class SoundManager:
 class JarvisUI:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("J.A.R.V.I.S")
+        self.root.title("JARVIS")
         self.root.update_idletasks()
+
+        # ── Application icon (keep ref to prevent GC) ─────────────────────────
+        self._icon_photos = []
+        try:
+            icon_path = BASE_DIR / "Icon" / "jarvis.png"
+            if icon_path.is_file():
+                img = Image.open(icon_path).resize((64, 64), Image.LANCZOS)
+                photo = ImageTk.PhotoImage(img)
+                self._icon_photos.append(photo)
+                self.root.tk.call("wm", "iconphoto", self.root, "-default", photo)
+                # Some WMs (e.g. GNOME/KDE) need a second attempt after mapping
+                self.root.after(200, lambda: self._set_icon_again(icon_path))
+        except Exception as e:
+            print(f"[JARVIS] Icon: {e}")
 
         sw = self.root.winfo_screenwidth()
         sh = self.root.winfo_screenheight()
@@ -559,7 +510,7 @@ class JarvisUI:
 
         self._window_geometry = _geo
         self._normal_size = (self.W, self.H)
-        self._fullscreen = True
+        self._fullscreen = False
 
         self._set_layout_metrics(self.W, self.H)
 
@@ -586,7 +537,7 @@ class JarvisUI:
         self._health_display  = ""
         self._health_hide_job = None
         self._weather_card = {
-            "city": "London",
+            "city": "Grantham",
             "primary": "--",
             "details": ["Loading weather..."],
         }
@@ -737,9 +688,25 @@ class JarvisUI:
         self.root.after(180, self._play_startup_sfx_once)
         self._kick_brief_refresh()
         self._build_social_bar()
-        self.root.after(120, self._enter_fullscreen)
+        # Start in windowed mode (press F11 or ⌘F for fullscreen)
         self._animate()
+
+        # ── Bind window resize ────────────────────────────────────────────────
+        self._resize_job = None
+        self.root.bind("<Configure>", self._on_window_configure)
         self.root.protocol("WM_DELETE_WINDOW", self._shutdown)
+
+    def _set_icon_again(self, icon_path):
+        """Some window managers need the icon re-applied after the window is mapped."""
+        try:
+            if not icon_path.is_file():
+                return
+            img = Image.open(icon_path).resize((64, 64), Image.LANCZOS)
+            photo = ImageTk.PhotoImage(img)
+            self._icon_photos.append(photo)
+            self.root.tk.call("wm", "iconphoto", self.root, "-default", photo)
+        except Exception:
+            pass
 
     def _force_startup_size(self):
         if self._fullscreen:
@@ -748,6 +715,27 @@ class JarvisUI:
         self.root.geometry(self._window_geometry)
         self._resize_surface(*self._normal_size)
         self.root.update_idletasks()
+
+    def _on_window_configure(self, event):
+        """Resize the canvas and layout whenever the window changes size."""
+        if event.widget != self.root:
+            return  # ignore child widget Configure events
+        new_w = event.width
+        new_h = event.height
+        # Debounce: skip if size hasn't changed meaningfully
+        if abs(new_w - self.W) < 8 and abs(new_h - self.H) < 8:
+            return
+        # Use a delayed resize to avoid flicker during dragging
+        if hasattr(self, "_resize_job") and self._resize_job:
+            try:
+                self.root.after_cancel(self._resize_job)
+            except Exception:
+                pass
+        self._resize_job = self.root.after(60, self._delayed_resize, new_w, new_h)
+
+    def _delayed_resize(self, new_w: int, new_h: int):
+        self._resize_job = None
+        self._resize_surface(new_w, new_h)
 
     def _enter_fullscreen(self):
         sw = max(self.root.winfo_screenwidth(), self.root.winfo_width(), self.W)
@@ -794,8 +782,8 @@ class JarvisUI:
         def _open(url):
             def _handler(_e, _u=url):
                 try:
-                    os.startfile(_u)
-                except OSError:
+                    subprocess.Popen(["xdg-open", _u])
+                except Exception:
                     webbrowser.open(_u, new=2)
             return _handler
 
@@ -808,13 +796,13 @@ class JarvisUI:
                 return None
 
         name_lbl = tk.Label(
-            bar, text="bnsware",
+            bar, text="bobguffie",
             fg="#3a8a82", bg=C_BG,
             font=font_display(14), cursor="hand2",
             justify="left",
         )
         name_lbl.pack(side="left", padx=(0, 10))
-        name_lbl.bind("<Button-1>", _open("https://github.com/bnsware"))
+        name_lbl.bind("<Button-1>", _open("https://github.com/bobguffie"))
 
     # ── Voice ─────────────────────────────────────────────────────────────────
     def _load_voice(self) -> str:
@@ -2130,8 +2118,7 @@ class JarvisUI:
         try:
             self._stats['cpu']  = psutil.cpu_percent()
             self._stats['ram']  = psutil.virtual_memory().percent
-            _drive = os.environ.get("SystemDrive", "C:") + "\\"
-            self._stats['disk'] = psutil.disk_usage(_drive).percent
+            self._stats['disk'] = psutil.disk_usage("/").percent
             batt = psutil.sensors_battery()
             self._stats['battery'] = batt.percent if batt else 100.0
             now = time.time()
@@ -2236,13 +2223,13 @@ class JarvisUI:
     def _parse_weather_card(self, text: str) -> dict:
         if not text or "unavailable" in text.lower() or "unavailable" in text.lower():
             return {
-                "city": "London",
+                "city": "Grantham",
                 "primary": "--",
                 "details": ["Weather data unavailable."],
             }
 
         prefix, _, body = text.partition(":")
-        city = "London"
+        city = "Grantham"
         if " for" in prefix:
             city = prefix.split(" for", 1)[0].strip().title()
 
@@ -2271,11 +2258,11 @@ class JarvisUI:
     def _refresh_brief_cards(self):
         try:
             try:
-                weather = get_weather_summary("London")
+                weather = get_weather_summary("Grantham+UK")
                 self._weather_card = self._parse_weather_card(weather)
             except Exception:
                 self._weather_card = {
-                    "city": "London",
+                    "city": "Grantham+UK",
                     "primary": "--",
                     "details": ["Weather data unavailable."],
                 }
@@ -2412,7 +2399,7 @@ class JarvisUI:
 
         cards = [
             ("time", 0.22, "TIME", C_GOLD),
-            ("weather", 0.20, "WEATHER · London", C_BLUE),
+            ("weather", 0.20, "WEATHER · Grantham+UK", C_BLUE),
             ("system", 0.28, "SYSTEM STATUS", C_PRI),
             ("health", 0.30, "HEALTH SUMMARY", C_GREEN),
         ]
@@ -2458,7 +2445,7 @@ class JarvisUI:
 
             elif section == "weather":
                 c.create_text(section_x+section_pad, current_y+58, text=self._weather_card["primary"],
-                              fill=muted_primary, font=font_display(30 if focus_boost > 0.08 else 28), anchor="w")
+                              fill=muted_primary, font=font_display(10 if focus_boost > 0.08 else 10), anchor="w")
                 c.create_text(section_x+section_pad, current_y+84, text=self._weather_card["city"].upper(),
                               fill=muted_label, font=font_body_bold(10), anchor="w")
                 wy = current_y + 108
@@ -2785,7 +2772,7 @@ class JarvisUI:
         c.create_rectangle(0, H-FOOTER_H, W, H, fill="#010a0a", outline="")
         c.create_line(0, H-FOOTER_H, W, H-FOOTER_H, fill=C_DIM, width=1)
         c.create_text(W//2, H-13, fill=C_DIM, font=font_body(9),
-                      text="JARVIS · Windows Edition · Realtime Voice Core")
+                      text="JARVIS · Linux Edition · Realtime Voice Core")
         c.create_text(W-18, H-13, fill=C_DIM, font=font_body(9),
                       text="[F4] MUTE  [F5] PAUSE  [F9] MINI  [F11] FULLSCREEN  [ESC] EXIT", anchor="e")
 
@@ -2800,7 +2787,7 @@ class JarvisUI:
                                     highlightbackground=C_PRI,
                                     highlightthickness=1)
         setup_w = min(820, max(620, int(self.W * 0.48)))
-        setup_h = min(720, max(560, int(self.H * 0.62)))
+        setup_h = min(820, max(620, int(self.H * 0.85)))
         self.setup_frame.place(relx=0.5, rely=0.5, anchor="center", width=setup_w, height=setup_h)
         self.setup_frame.pack_propagate(False)
 

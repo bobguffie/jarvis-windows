@@ -1,12 +1,12 @@
 """
-Browser control — Windows version.
-Opens the default browser via os.startfile / webbrowser.
+Browser control — Linux version.
+Opens the default browser via xdg-open / webbrowser.
 """
 
 from __future__ import annotations
 
-import os
 import re
+import subprocess
 import urllib.parse
 import webbrowser
 
@@ -17,8 +17,8 @@ _VIDEO_ID_RE = re.compile(r'"videoId":"([A-Za-z0-9_-]{11})"')
 
 def _open(url: str) -> None:
     try:
-        os.startfile(url)
-    except OSError:
+        subprocess.run(["xdg-open", url], check=False)
+    except Exception:
         webbrowser.open(url, new=2)
 
 

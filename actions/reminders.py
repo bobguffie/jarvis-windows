@@ -1,8 +1,6 @@
 """
-Reminders — Windows version.
-
-Uses Outlook Tasks if Outlook is available, otherwise works with a local
-memory/reminders.json file. APIs have the same signatures as the original macOS version.
+Reminders — Linux version.
+Uses local JSON storage (memory/reminders.json).
 """
 
 from __future__ import annotations
@@ -22,15 +20,8 @@ MONTHS = ["", "January", "February", "March", "April", "May", "June", "July", "A
 
 
 def _try_outlook():
-    try:
-        import win32com.client  # type: ignore
-        import pythoncom  # type: ignore
-        pythoncom.CoInitialize()
-        outlook = win32com.client.Dispatch("Outlook.Application")
-        namespace = outlook.GetNamespace("MAPI")
-        return outlook, namespace
-    except Exception:
-        return None, None
+    # Linux: Outlook not available
+    return None, None
 
 
 def _load_local() -> list[dict]:
@@ -90,70 +81,13 @@ def _normalize_due_iso(due_iso: str) -> tuple[int, bool]:
 
 
 def _outlook_list(query_mode: str, limit: int, list_name: str) -> list[dict]:
-    outlook, namespace = _try_outlook()
-    if not outlook:
-        return []
-    try:
-        folder = namespace.GetDefaultFolder(13)  # olFolderTasks
-        items = folder.Items
-        items.Sort("[DueDate]")
-        now = dt.datetime.now()
-        result = []
-        for it in items:
-            try:
-                if getattr(it, "Complete", False):
-                    continue
-                title = str(getattr(it, "Subject", "") or "Unnamed reminder")
-                due = getattr(it, "DueDate", None)
-                due_ts = 0
-                if due:
-                    try:
-                        d = dt.datetime.strptime(str(due)[:19], "%Y-%m-%d %H:%M:%S")
-                        # Outlook 4501-01-01 = "none"
-                        if d.year < 4000:
-                            due_ts = int(d.timestamp())
-                    except Exception:
-                        pass
-                result.append({
-                    "title": title,
-                    "list_name": list_name or "Outlook Tasks",
-                    "notes": str(getattr(it, "Body", "") or ""),
-                    "completed": False,
-                    "priority": int(getattr(it, "Importance", 1) or 1),
-                    "due_ts": due_ts,
-                    "all_day": False,
-                })
-            except Exception:
-                continue
-        return result
-    except Exception:
-        return []
+    # Linux: return empty, use local only
+    return []
 
 
 def _outlook_add(title: str, due_ts: int, notes: str, list_name: str, priority: str, all_day: bool) -> dict | None:
-    outlook, _ = _try_outlook()
-    if not outlook:
-        return None
-    try:
-        task = outlook.CreateItem(3)  # olTaskItem
-        task.Subject = title
-        if due_ts:
-            task.DueDate = dt.datetime.fromtimestamp(due_ts).strftime("%Y-%m-%d %H:%M")
-        if notes:
-            task.Body = notes
-        prio_map = {"low": 0, "medium": 1, "high": 2}
-        task.Importance = prio_map.get((priority or "").lower(), 1)
-        task.Save()
-        return {
-            "title": title,
-            "list_name": list_name or "Outlook Tasks",
-            "notes": notes,
-            "priority": task.Importance,
-            "due_ts": due_ts,
-            "all_day": all_day,
-        }
-    except Exception:
-        return None
+    # Linux: Outlook not available
+    return None
 
 
 def _day_label(when: dt.datetime, now: dt.datetime) -> str:

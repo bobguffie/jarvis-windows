@@ -1,24 +1,24 @@
 """
-Screen analysis — Windows version.
-Takes a screenshot of the active window using Windows API (ctypes + PIL),
-then analyzes it with Gemini Vision or LM Studio (OpenAI-compatible vision model)
+Screen analysis — Linux version.
+Takes a screenshot using scrot (X11) or grim (Wayland), then analyzes it
+with Gemini Vision or LM Studio (OpenAI-compatible vision model)
 depending on the selected backend.
 """
 
 from __future__ import annotations
 
 import base64
-import ctypes
-import ctypes.wintypes as wt
 import io
 import json
 import mimetypes
+import os
+import subprocess
 import tempfile
 import time
 from pathlib import Path
 
 import requests
-from PIL import Image, ImageGrab, ImageStat
+from PIL import Image, ImageStat
 
 from app_config import get_app_config_value, is_local_backend
 
@@ -33,78 +33,78 @@ VISION_MAX_INLINE_BYTES = 5_500_000
 
 
 def _screen_permission_message() -> str:
+    session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
+    if session_type == "wayland":
+        return (
+            "Could not take a screenshot on Wayland. "
+            "Install grim and slurp: sudo apt install grim slurp "
+            "or switch to X11 for better compatibility."
+        )
     return (
-        "Could not take a screenshot. There may be admin permission restrictions "
-        "or protected content limitations in Windows. Make sure JARVIS is running "
-        "under a normal user account and the target window is not DRM-protected."
+        "Could not take a screenshot. Make sure scrot is installed: "
+        "sudo apt install scrot"
     )
 
 
-def _get_foreground_window_rect() -> tuple[tuple[int, int, int, int] | None, str, str]:
-    user32 = ctypes.windll.user32
-    hwnd = user32.GetForegroundWindow()
-    if not hwnd:
-        return None, "", ""
+def _get_screenshot_tool() -> tuple[str, str]:
+    """Returns (tool_name, command_list) for screen capture."""
+    session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
+    if session_type == "wayland":
+        # Prefer grim+slurp on Wayland
+        if _check_command("grim") and _check_command("slurp"):
+            return "grim", ["grim", "-g", "$(slurp)"]
+        if _check_command("grim"):
+            return "grim", ["grim"]
+        return "unsupported", []
+    # Default X11 - scrot
+    if _check_command("scrot"):
+        return "scrot", ["scrot", "-z"]  # -z = zero compression (fast)
+    return "unsupported", []
 
-    length = user32.GetWindowTextLengthW(hwnd)
-    buf = ctypes.create_unicode_buffer(length + 1)
-    user32.GetWindowTextW(hwnd, buf, length + 1)
-    window_title = buf.value or ""
 
-    owner = ""
+def _check_command(cmd: str) -> bool:
     try:
-        pid = wt.DWORD()
-        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-        try:
-            import psutil
-            proc = psutil.Process(pid.value)
-            owner = proc.name()
-        except Exception:
-            owner = ""
+        subprocess.run(["which", cmd], capture_output=True, check=True)
+        return True
     except Exception:
-        owner = ""
-
-    try:
-        DWMWA_EXTENDED_FRAME_BOUNDS = 9
-        rect = wt.RECT()
-        hr = ctypes.windll.dwmapi.DwmGetWindowAttribute(
-            wt.HWND(hwnd),
-            ctypes.c_uint(DWMWA_EXTENDED_FRAME_BOUNDS),
-            ctypes.byref(rect),
-            ctypes.sizeof(rect),
-        )
-        if hr == 0:
-            return (rect.left, rect.top, rect.right, rect.bottom), owner, window_title
-    except Exception:
-        pass
-
-    rect = wt.RECT()
-    user32.GetWindowRect(hwnd, ctypes.byref(rect))
-    return (rect.left, rect.top, rect.right, rect.bottom), owner, window_title
+        return False
 
 
 def _capture_active_window() -> tuple[bool, str, dict]:
     try:
-        bbox, owner, title = _get_foreground_window_rect()
-        if not bbox:
-            return False, "Active window not found.", {}
-        left, top, right, bottom = bbox
-        if right - left <= 4 or bottom - top <= 4:
-            image = ImageGrab.grab(all_screens=True)
-        else:
-            try:
-                image = ImageGrab.grab(bbox=bbox, all_screens=True)
-            except TypeError:
-                image = ImageGrab.grab(bbox=bbox)
+        tool, cmd = _get_screenshot_tool()
+        if tool == "unsupported":
+            return False, _screen_permission_message(), {}
 
-        tmp = tempfile.NamedTemporaryFile(prefix="jarvis-screen-", suffix=".png", delete=False)
-        tmp.close()
-        image.save(tmp.name, format="PNG")
+        tmp_path = "/tmp/jarvis-screen.png"
+
+        if tool == "scrot":
+            # Capture the focused window with -u flag, or entire screen
+            try:
+                subprocess.run(["scrot", "-u", "-z", tmp_path], check=True, timeout=5)
+            except Exception:
+                # Fallback to full screen if -u fails
+                subprocess.run(["scrot", "-z", tmp_path], check=True, timeout=5)
+
+        elif tool == "grim":
+            if len(cmd) > 1 and "slurp" in cmd[-1]:
+                # Interactive area selection with slurp
+                slurp_result = subprocess.run(["slurp"], capture_output=True, text=True, timeout=5)
+                if slurp_result.returncode == 0 and slurp_result.stdout.strip():
+                    geometry = slurp_result.stdout.strip()
+                    subprocess.run(["grim", "-g", geometry, tmp_path], check=True, timeout=5)
+                else:
+                    subprocess.run(["grim", tmp_path], check=True, timeout=5)
+            else:
+                subprocess.run(["grim", tmp_path], check=True, timeout=5)
+
+        if not os.path.exists(tmp_path) or os.path.getsize(tmp_path) <= 0:
+            return False, "Screenshot came back empty.", {}
+
         return True, "", {
-            "image_path": tmp.name,
-            "owner_name": owner,
-            "window_title": title,
-            "bounds": {"left": left, "top": top, "right": right, "bottom": bottom},
+            "image_path": tmp_path,
+            "owner_name": "",
+            "window_title": "",
         }
     except Exception as exc:
         return False, f"Could not take screenshot: {exc}", {}
@@ -153,7 +153,7 @@ def _vision_prompt(query: str, owner_name: str, window_title: str) -> str:
     label = window_title or owner_name or "active window"
     user_query = (query or "What's on the screen?").strip()
     return (
-        "You are an image interpreter for JARVIS on Windows performing screen analysis.\n"
+        "You are an image interpreter for JARVIS on Linux performing screen analysis.\n"
         "The screenshot below belongs to the active window.\n"
         f"Window context: {label}\n\n"
         "Your tasks:\n"

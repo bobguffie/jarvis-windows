@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=JARVIS
+Comment=AI Voice Assistant — Just A Rather Very Intelligent System
+Exec=/home/bob/jarvis/jarvis-windows-english/start.sh
+Icon=/home/bob/jarvis/jarvis-windows-english/Icon/jarvis.png
+Path=/home/bob/jarvis/jarvis-windows-english
+Terminal=false
+Categories=Utility;AudioVideo;ArtificialIntelligence;
+StartupNotify=true

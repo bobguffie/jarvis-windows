@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-JARVIS Windows — Real-time voice assistant core
-https://github.com/bnsware
-Adapted workflow for Windows environment
+JARVIS Linux — Real-time voice assistant core
+https://github.com/bobguffie/jarvis-linux-english
+Adapted workflow for Linux environment
 """
 
 import asyncio
@@ -54,7 +54,7 @@ pya              = pyaudio.PyAudio()
 TOOL_DECLARATIONS = [
     {
         "name": "open_app",
-        "description": "Opens any application on Windows like Spotify, Chrome, or VS Code.",
+        "description": "Opens any application on Linux like Spotify, Chrome, or VS Code.",
         "parameters": {
             "type": "OBJECT",
             "properties": {
@@ -83,15 +83,21 @@ TOOL_DECLARATIONS = [
     {
         "name": "get_weather",
         "description": (
-            "Summarises the current weather. Default location is Hatay. "
-            "Use when the user asks about weather, temperature, or rain conditions."
+            "Gets the current weather summary, tomorrow's forecast, or a 10-day outlook for a location. "
+            "When the user asks for tomorrow's weather or a 10-day forecast, you must call this tool "
+            "and pass the time context (like 'tomorrow' or '10-day') inside the query or location argument, "
+            "rather than refusing the request."
         ),
         "parameters": {
             "type": "OBJECT",
             "properties": {
                 "location": {
                     "type": "STRING",
-                    "description": "City or location. Leave empty to use Hatay."
+                    "description": "City or location. Leave empty for Grantham."
+                },
+                "query": {
+                    "type": "STRING",
+                    "description": "Time context like 'tomorrow', '10 day outlook', or a weekday name"
                 }
             }
         }
@@ -99,7 +105,7 @@ TOOL_DECLARATIONS = [
     {
         "name": "get_calendar_events",
         "description": (
-            "Reads the Windows calendar (Outlook if available, otherwise local JSON). "
+            "Reads the local calendar (JSON file). "
             "Summarises today's, tomorrow's, next events or upcoming agenda. "
             "Use when the user asks about meetings, calendar, agenda, events or daily schedule."
         ),
@@ -124,7 +130,7 @@ TOOL_DECLARATIONS = [
     {
         "name": "add_calendar_event",
         "description": (
-            "Adds a new event to the Windows calendar (Outlook if available, otherwise local JSON). "
+            "Adds a new event to the local calendar (JSON file). "
             "Use when the user wants to add a meeting, appointment, calendar entry or create an event. "
             "Provide the start date as actual date/time; if end is not given, a default duration is used."
         ),
@@ -166,7 +172,7 @@ TOOL_DECLARATIONS = [
     {
         "name": "delete_calendar_event",
         "description": (
-            "Deletes an event from the Windows calendar. "
+            "Deletes an event from the local calendar. "
             "Use when the user wants to delete a meeting, appointment or calendar record. "
             "If there are multiple events with the same name, provide the start date as actual date/time to find the correct record."
         ),
@@ -196,7 +202,7 @@ TOOL_DECLARATIONS = [
     {
         "name": "get_reminders",
         "description": (
-            "Reads the reminders list (Outlook Tasks if available, otherwise local JSON). "
+            "Reads the reminders list (local JSON). "
             "Summarises today's, upcoming, overdue or all open reminders. "
             "Use when the user asks about reminders, to-do list or tasks."
         ),
@@ -222,7 +228,7 @@ TOOL_DECLARATIONS = [
     {
         "name": "add_reminder",
         "description": (
-            "Adds a new reminder (Outlook Tasks if available, otherwise local JSON). "
+            "Adds a new reminder (local JSON). "
             "Use when the user says 'remind me', 'add reminder', 'set a reminder'. "
             "Convert relative time expressions to ISO format in the due_iso field based on today's date context."
         ),
@@ -272,7 +278,7 @@ TOOL_DECLARATIONS = [
     },
     {
         "name": "shell_run",
-        "description": "Runs a Windows PowerShell command. File operations, system management.",
+        "description": "Runs a Linux Bash command. File operations, system management.",
         "parameters": {
             "type": "OBJECT",
             "properties": {
@@ -346,9 +352,9 @@ TOOL_DECLARATIONS = [
     {
         "name": "analyze_screen",
         "description": (
-            "Takes a screenshot of the active window and analyses it with Gemini vision. "
+            "Takes a screenshot and analyses it with Gemini vision. "
             "Use when the user asks what is on the screen, an error, visible text, buttons or window content. "
-            "This version only supports the active window."
+            "This version uses scrot (X11) or grim (Wayland) for screen capture."
         ),
         "parameters": {
             "type": "OBJECT",
@@ -409,7 +415,7 @@ TOOL_DECLARATIONS = [
     {
         "name": "send_whatsapp_message",
         "description": (
-            "Opens a message draft or sends a message via WhatsApp Desktop or WhatsApp Web. "
+            "Opens a message draft or sends a message via WhatsApp Web. "
             "Can work with a contact name or phone number. "
             "If no phone number is given, first search the contact name in saved WhatsApp contacts and imported phone book. "
             "If the user explicitly says 'send', 'forward', 'send now' with a clear sending intent, "
@@ -480,7 +486,7 @@ def load_system_prompt() -> str:
         return PROMPT_PATH.read_text(encoding="utf-8")
     except Exception:
         return (
-            "You are JARVIS — a personal AI assistant running on Windows. "
+            "You are JARVIS — a personal AI assistant running on Linux. "
             "Speak in English. Give short and clear responses. "
             "Complete tasks by using tools, never simulate or hallucinate."
         )
@@ -685,7 +691,18 @@ class JarvisLive:
             elif name == "get_weather":
                 self._focus_ui_section_for_tool(name, args)
                 r = await loop.run_in_executor(
-                    None, lambda: get_weather_summary(args.get("location") or None))
+                    None, lambda: get_weather_summary(args.get("location") or args.get("query") or "today"))
+
+                # Format the output text cleanly into layout cards
+                if r:
+                    clean_text = r.replace("Current weather for Grantham: ", "").replace("Weather forecast for Grantham tomorrow: ", "").replace("Here is the 10-day weather outlook for Grantham:", "")
+                    self.ui._weather_card["primary"] = "Grantham"
+                    # Split by periods to turn each sentence into its own distinct row/bullet point
+                    self.ui._weather_card["details"] = [sentence.strip() for sentence in clean_text.split(".") if sentence.strip()]
+                else:
+                    self.ui._weather_card["primary"] = "Weather"
+                    self.ui._weather_card["details"] = ["Offline"]
+
                 result = r or "Weather information retrieved."
 
             elif name == "get_calendar_events":
@@ -865,7 +882,15 @@ class JarvisLive:
                 with self._speaking_lock:
                     jarvis_speaking = self._is_speaking
                 if not jarvis_speaking and not self.ui.muted and not self._paused:
-                    await self.out_queue.put({"data": data, "mime_type": "audio/pcm"})
+                    # Non-blocking put: drop oldest if queue is full to avoid stalls
+                    try:
+                        self.out_queue.put_nowait({"data": data, "mime_type": "audio/pcm"})
+                    except asyncio.QueueFull:
+                        try:
+                            self.out_queue.get_nowait()
+                            self.out_queue.put_nowait({"data": data, "mime_type": "audio/pcm"})
+                        except (asyncio.QueueFull, asyncio.QueueEmpty):
+                            pass
         except Exception as e:
             print(f"[JARVIS] ❌ Microphone: {e}")
             raise
@@ -956,13 +981,11 @@ class JarvisLive:
         try:
             while True:
                 chunk = await self.audio_in_queue.get()
-                self.set_speaking(True)
                 await asyncio.to_thread(stream.write, chunk)
         except Exception as e:
             print(f"[JARVIS] ❌ Audio: {e}")
             raise
         finally:
-            self.set_speaking(False)
             stream.close()
 
     async def run(self):
@@ -1000,7 +1023,9 @@ class JarvisLive:
                     tg.create_task(self._receive_audio())
                     tg.create_task(self._play_audio())
 
-            except Exception as e:
+            except (Exception, asyncio.CancelledError, GeneratorExit, KeyboardInterrupt) as e:
+                if isinstance(e, (KeyboardInterrupt, GeneratorExit)):
+                    raise
                 print(f"[JARVIS] ⚠️ {e}")
                 traceback.print_exc()
                 self.set_speaking(False)

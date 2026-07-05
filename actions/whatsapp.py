@@ -1,17 +1,15 @@
 """
-Send WhatsApp messages — Windows version.
-
-- Opens WhatsApp Desktop via URL scheme (whatsapp://send?phone=...&text=...).
-- Sends automatically with pyautogui Enter key press.
-- Falls back to WhatsApp Web in the default browser.
-- Frequently used contacts are saved to persistent memory.
+Send WhatsApp messages — Linux version.
+- Opens WhatsApp Web in the browser (no native Linux client).
+- Falls back to webbrowser module.
+- Frequently used contacts saved to persistent memory.
 """
 
 from __future__ import annotations
 
 import json
-import os
 import re
+import subprocess
 import time
 import unicodedata
 import urllib.parse
@@ -44,7 +42,7 @@ def _normalize_lookup(text: str) -> str:
     text = (text or "").strip().casefold()
     text = unicodedata.normalize("NFKD", text)
     text = "".join(ch for ch in text if not unicodedata.combining(ch))
-    text = text.replace("ı", "i")
+    text = text.replace("\u0131", "i")
     text = re.sub(r"\s+", " ", text)
     return text
 
@@ -240,22 +238,17 @@ def import_phone_book_from_vcf(vcf_path: str) -> str:
     return f"{imported} phone book contacts imported, {skipped} records skipped."
 
 
-def _open_uri(uri: str) -> tuple[bool, str]:
-    try:
-        os.startfile(uri)
-        return True, "ok"
-    except OSError as exc:
-        return False, str(exc)
-
-
 def _open_browser(url: str) -> tuple[bool, str]:
     try:
-        if webbrowser.open(url, new=2):
-            return True, "default browser"
-        os.startfile(url)
+        subprocess.Popen(["xdg-open", url])
         return True, "default browser"
-    except Exception as exc:
-        return False, f"Could not open browser: {exc}"
+    except Exception:
+        try:
+            if webbrowser.open(url, new=2):
+                return True, "default browser"
+        except Exception:
+            pass
+        return False, "Could not open browser"
 
 
 def _auto_send_with_pyautogui() -> tuple[bool, str]:
@@ -269,15 +262,6 @@ def _auto_send_with_pyautogui() -> tuple[bool, str]:
         return True, "ok"
     except Exception as exc:
         return False, f"pyautogui error: {exc}"
-
-
-def _open_whatsapp_desktop(phone_number: str, message: str) -> tuple[bool, str]:
-    encoded = urllib.parse.quote(message.strip())
-    url = f"whatsapp://send?phone={phone_number}&text={encoded}"
-    ok, detail = _open_uri(url)
-    if not ok:
-        return False, f"Could not open WhatsApp Desktop: {detail}"
-    return True, "WhatsApp Desktop chat opened."
 
 
 def _open_whatsapp_web(phone_number: str, message: str) -> tuple[bool, str]:
@@ -295,10 +279,6 @@ def send_whatsapp_message(
 ) -> str:
     if not message or not message.strip():
         return "Message cannot be empty."
-
-    app_target = (app_target or "auto").strip().lower()
-    if app_target not in {"auto", "desktop", "web"}:
-        app_target = "auto"
 
     normalized_phone = ""
     if phone_number and phone_number.strip():
@@ -336,23 +316,7 @@ def send_whatsapp_message(
 
     source_note = " (found from phone book)" if contact_source == "phone_book" else ""
 
-    if app_target in {"auto", "desktop"}:
-        ok, detail = _open_whatsapp_desktop(normalized_phone, message)
-        if ok:
-            label = resolved_name or f"+{normalized_phone}"
-            if not send_now:
-                return f"Draft message opened in WhatsApp Desktop for {label}{source_note}."
-            ok_send, send_detail = _auto_send_with_pyautogui()
-            if ok_send:
-                return f"Message sent to {label}{source_note} via WhatsApp Desktop."
-            return (
-                "WhatsApp Desktop chat opened but auto-send could not complete. "
-                f"{send_detail}. pyautogui must be installed and the WhatsApp window must be in the foreground."
-            )
-        if app_target == "desktop":
-            # Don't fall back to web
-            return f"Error opening WhatsApp Desktop: {detail}"
-
+    # Linux: always use web (no native desktop client)
     ok, browser_label = _open_whatsapp_web(normalized_phone, message)
     if not ok:
         return browser_label

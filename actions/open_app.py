@@ -1,6 +1,6 @@
 """
-Open applications — Windows version.
-Works via Windows 'start' command, AppsFolder, and PATH.
+Open applications — Linux version.
+Works via xdg-open, PATH binaries, and xdg-open fallback.
 """
 
 from __future__ import annotations
@@ -8,101 +8,72 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-import winreg
 
 
 APP_ALIASES = {
-    "edge":         "msedge",
-    "chrome":       "chrome",
-    "firefox":      "firefox",
-    "brave":        "brave",
-    "opera":        "opera",
-    "safari":       "msedge",  # macOS analog
-    "terminal":     "wt",       # Windows Terminal
-    "powershell":   "powershell",
-    "cmd":          "cmd",
-    "command prompt": "cmd",
-    "explorer":     "explorer",
-    "finder":       "explorer",
-    "file explorer": "explorer",
-    "spotify":      "spotify",
-    "vscode":       "code",
-    "vs code":      "code",
-    "code":         "code",
+    "browser":       "xdg-open http://google.com",
+    "chrome":        "google-chrome",
+    "google chrome": "google-chrome",
+    "firefox":       "firefox",
+    "brave":         "brave-browser",
+    "opera":         "opera",
+    "terminal":      "gnome-terminal",
+    "console":       "gnome-terminal",
+    "shell":         "gnome-terminal",
+    "explorer":      "nautilus",
+    "file manager":  "nautilus",
+    "files":         "xdg-open .",
+    "home":          "xdg-open ~",
+    "spotify":       "spotify",
+    "vscode":        "code",
+    "vs code":       "code",
+    "code":          "code",
     "visual studio code": "code",
-    "xcode":        "code",
-    "notion":       "notion",
-    "slack":        "slack",
-    "discord":      "discord",
-    "whatsapp":     "whatsapp",
-    "telegram":     "telegram",
-    "zoom":         "zoom",
-    "mail":         "outlook",
-    "outlook":      "outlook",
-    "calendar":     "outlookcal:",
-    "notes":        "notepad",
-    "notepad":      "notepad",
-    "music":        "ms-windows-store://pdp/?ProductId=9wzdncrfj3pt",
-    "media player": "wmplayer",
-    "photos":       "ms-photos:",
-    "maps":         "bingmaps:",
-    "calculator":   "calc",
-    "settings":     "ms-settings:",
-    "system settings": "ms-settings:",
-    "task manager": "taskmgr",
-    "control panel": "control",
-    "preview":      "mspaint",
-    "textedit":     "notepad",
-    "figma":        "figma",
-    "postman":      "postman",
-    "docker":       "Docker Desktop",
+    "notion":        "notion",
+    "slack":         "slack",
+    "discord":       "discord",
+    "whatsapp":      "xdg-open https://web.whatsapp.com",
+    "telegram":      "telegram-desktop",
+    "zoom":          "zoom",
+    "mail":          "thunderbird",
+    "outlook":       "xdg-open https://outlook.live.com",
+    "notes":         "gedit",
+    "notepad":       "gedit",
+    "text editor":   "gedit",
+    "music":         "xdg-open https://open.spotify.com",
+    "photos":        "eog",
+    "image viewer":  "eog",
+    "maps":          "xdg-open https://maps.google.com",
+    "calculator":    "gnome-calculator",
+    "settings":      "gnome-control-center",
+    "system settings": "gnome-control-center",
+    "task manager":  "gnome-system-monitor",
+    "system monitor": "gnome-system-monitor",
+    "control panel": "gnome-control-center",
+    "preview":       "eog",
+    "textedit":      "gedit",
+    "figma":         "xdg-open https://figma.com",
+    "postman":       "postman",
+    "docker":        "docker",
+    "steam":         "steam",
+    "vlc":           "vlc",
+    "libreoffice":   "libreoffice",
+    "office":        "libreoffice",
 }
 
 
-# Local installation extensions — also recognizes URI schemes for start command
+# URI/URL prefixes that should be opened with xdg-open
 _URI_PREFIXES = (
-    "ms-settings:", "ms-photos:", "bingmaps:", "outlookcal:",
-    "ms-windows-store:", "shell:", "spotify:",
+    "http://", "https://", "mailto:", "tel:", "ftp://",
 )
 
 
-def _start_uri(uri: str) -> bool:
+def _xdg_open(target: str) -> bool:
     try:
-        os.startfile(uri)
+        subprocess.Popen(["xdg-open", target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return True
-    except OSError:
-        return False
-
-
-def _start_command(name: str) -> bool:
-    """Attempts to open an app by name using the Windows 'start' command."""
-    try:
-        result = subprocess.run(
-            ["cmd", "/c", "start", "", "/B", name],
-            capture_output=True, text=True, timeout=10,
-        )
-        return result.returncode == 0
     except Exception:
         return False
-
-
-def _registry_app_paths(name: str) -> str | None:
-    """Search for exe under HKLM/HKCU App Paths."""
-    candidates = [name, name + ".exe"]
-    roots = (
-        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"),
-        (winreg.HKEY_CURRENT_USER,  r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"),
-    )
-    for root, sub in roots:
-        for cand in candidates:
-            try:
-                with winreg.OpenKey(root, sub + "\\" + cand) as key:
-                    val, _ = winreg.QueryValueEx(key, None)
-                    if val and os.path.exists(val):
-                        return val
-            except OSError:
-                continue
-    return None
 
 
 def open_app(app_name: str) -> str:
@@ -112,38 +83,25 @@ def open_app(app_name: str) -> str:
     normalized = app_name.lower().strip()
     resolved = APP_ALIASES.get(normalized, app_name)
 
-    # 1. URI scheme (ms-settings, spotify:, etc.)
+    # 1. URI scheme (http, https, mailto, etc.)
     if any(resolved.startswith(p) for p in _URI_PREFIXES):
-        if _start_uri(resolved):
+        if _xdg_open(resolved):
             return f"{app_name} opened."
 
-    # 2. If exe is in PATH, open directly
-    exe = shutil.which(resolved) or shutil.which(resolved + ".exe")
+    # 2. If binary is in PATH, open directly
+    binary = resolved.split()[0]  # Handle commands like "xdg-open ."
+    exe = shutil.which(binary)
     if exe:
         try:
-            subprocess.Popen([exe], close_fds=True)
-            return f"{resolved} opened."
+            # Use shell=True for commands with arguments (e.g., "xdg-open .")
+            subprocess.Popen(resolved, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return f"{app_name} opened."
         except Exception:
             pass
 
-    # 3. Registry App Paths
-    reg_exe = _registry_app_paths(resolved)
-    if reg_exe:
-        try:
-            subprocess.Popen([reg_exe], close_fds=True)
-            return f"{resolved} opened."
-        except Exception:
-            pass
-
-    # 4. start "" command (Start Menu name matching)
-    if _start_command(resolved):
-        return f"{resolved} opened."
-
-    # 5. os.startfile fallback (file/url)
+    # 3. Fallback to xdg-open
     try:
-        os.startfile(resolved)
+        subprocess.Popen(["xdg-open", resolved], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return f"{app_name} opened."
-    except OSError:
-        pass
-
-    return f"'{app_name}' not found or could not be opened."
+    except Exception as e:
+        return f"Could not open '{app_name}': {e}"

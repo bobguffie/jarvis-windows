@@ -1,31 +1,45 @@
 """
-Run terminal commands — Windows PowerShell.
+Run terminal commands — Linux Bash.
 """
 
 import subprocess
 
 
 BLOCKED = [
-    "format c:",
-    "format /q",
-    "del /f /s /q c:\\",
-    "rd /s /q c:\\",
-    "rmdir /s /q c:\\",
+    "rm -rf /",
+    "rm -rf /*",
+    "dd if=",
+    "mkfs",
+    "fdisk",
     "shutdown",
-    "logoff",
-    "diskpart",
-    "cipher /w:",
-    "fsutil file setzerodata",
-    "reg delete hklm",
-    "bcdedit",
+    "reboot",
+    "halt",
+    "poweroff",
+    "init 0",
+    "init 6",
+    "chmod 777 /",
+    "chown -R",
+    "> /dev/sda",
+    "| shutdown",
+    "sudo rm",
+    "sudo dd",
+    "sudo mkfs",
+    "sudo fdisk",
 ]
 
-# Standalone commands that leave a mark (actually delete / change permissions)
 _PREFIX_BLOCK = (
-    "del ", "erase ", "rd ", "rmdir ", "format ",
-    "takeown ", "icacls ", "attrib +s",
-    "remove-item ", "rm ", "ri ",
+    "rm ", "dd ", "mkfs", "fdisk",
+    "sudo rm", "sudo dd", "sudo mkfs",
 )
+
+
+def _open_path(path: str) -> str:
+    """Open a file/path in the default application."""
+    try:
+        subprocess.Popen(["xdg-open", path])
+        return f"Opened: {path}"
+    except Exception as e:
+        return f"Could not open: {e}"
 
 
 def shell_run(command: str, timeout: int = 30) -> str:
@@ -33,6 +47,16 @@ def shell_run(command: str, timeout: int = 30) -> str:
         return "No command specified."
 
     cmd_lower = command.lower().strip()
+
+    # Handle "clear" command
+    if cmd_lower in ("clear", "cls"):
+        subprocess.run(["clear"], shell=True)
+        return ""
+
+    # Handle "open" commands (open a file/directory)
+    if cmd_lower.startswith("open "):
+        path = command[5:].strip()
+        return _open_path(path)
 
     if cmd_lower.startswith(_PREFIX_BLOCK):
         return (
@@ -46,7 +70,7 @@ def shell_run(command: str, timeout: int = 30) -> str:
 
     try:
         result = subprocess.run(
-            ["powershell", "-NoProfile", "-NonInteractive", "-Command", command],
+            ["/bin/bash", "-c", command],
             capture_output=True, text=True, timeout=timeout,
         )
         output = (result.stdout + result.stderr).strip()
