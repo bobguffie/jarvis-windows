@@ -21,6 +21,7 @@ from app_config import (
 )
 from actions.weather import get_weather_summary
 from actions.health import get_health_card_lines
+from actions.workspace import get_workspace_lines, check_media_idle_timeout, refresh_workspace
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -542,6 +543,12 @@ class JarvisUI:
             "details": ["Loading weather..."],
         }
         self._health_card_lines = ["Loading vitals..."]
+
+        # ── Dynamic workspace card ───────────────────────────────────────────
+        self._active_workspace_tab = "todo"  # "todo" or "media"
+        self._workspace_lines = ["Loading workspace..."]
+        self._workspace_refresh_job = None
+
         self._panel_focus = ""
         self._panel_focus_until = 0.0
         self._brief_refresh_busy = False
@@ -2055,6 +2062,44 @@ class JarvisUI:
 
         self.root.after(0, _apply)
 
+    # ── Workspace tab switching ────────────────────────────────────────────────
+    def switch_workspace_tab(self, tab: str) -> str:
+        """Switch the workspace card between 'todo' and 'media' views.
+
+        Args:
+            tab: "todo" or "media"
+
+        Returns:
+            A confirmation message for the AI.
+        """
+        norm = (tab or "").strip().lower()
+        if norm not in ("todo", "media"):
+            return f"Unknown workspace tab: {tab}. Use 'todo' or 'media'."
+
+        self._active_workspace_tab = norm
+        # Refresh data in a background thread
+        threading.Thread(target=self._refresh_workspace_data, daemon=True).start()
+        label = "CHECKLIST" if norm == "todo" else "MEDIA"
+        self.write_log(f"SYS: Workspace switched to {label}.")
+        return f"Workspace switched to {label}."
+
+    def refresh_workspace_data(self) -> str:
+        """Force-refresh workspace card data immediately. Called by voice tool.
+
+        Returns:
+            Confirmation message.
+        """
+        refresh_workspace()  # reset idle timer + re-scan in workspace module
+        threading.Thread(target=self._refresh_workspace_data, daemon=True).start()
+        return "Workspace data refreshed."
+
+    def _refresh_workspace_data(self):
+        """Fetch fresh data from workspace module on a background thread."""
+        try:
+            self._workspace_lines = get_workspace_lines(self._active_workspace_tab)
+        except Exception as e:
+            self._workspace_lines = [f"Workspace error: {str(e)[:40]}"]
+
     def _state_color(self, state: str | None = None) -> str:
         effective = state or self._jarvis_state
         if effective == "PAUSED":
@@ -2147,6 +2192,15 @@ class JarvisUI:
             threading.Thread(target=self._update_stats, daemon=True).start()
         if t % 1800 == 1:
             self._kick_brief_refresh()
+        # Auto-switch workspace from media to todo when idle >10s
+        if t % 60 == 3 and self._active_workspace_tab == "media":
+            try:
+                if check_media_idle_timeout(10.0):
+                    self._active_workspace_tab = "todo"
+                    self._workspace_lines = get_workspace_lines("todo")
+                    self.write_log("SYS: Media idle — workspace switched to checklist.")
+            except Exception:
+                pass
 
         if self.speaking and t % 3 == 0:
             self._wave_jarvis = [random.randint(6, 30) for _ in range(18)]
@@ -2258,8 +2312,17 @@ class JarvisUI:
     def _refresh_brief_cards(self):
         try:
             try:
-                weather = get_weather_summary("Grantham+UK")
-                self._weather_card = self._parse_weather_card(weather)
+                r = get_weather_summary("Grantham+UK")
+                if r:
+                    clean_text = r.replace("Current weather for Grantham: ", "").replace("Weather forecast for Grantham tomorrow: ", "").replace("Here is the 10-day weather outlook for Grantham:", "")
+                    self._weather_card["primary"] = "Grantham"
+                    self._weather_card["details"] = [s.strip().capitalize() for s in clean_text.split(".") if s.strip()]
+                else:
+                    self._weather_card = {
+                        "city": "Grantham+UK",
+                        "primary": "--",
+                        "details": ["Weather data unavailable."],
+                    }
             except Exception:
                 self._weather_card = {
                     "city": "Grantham+UK",
@@ -2270,6 +2333,11 @@ class JarvisUI:
                 self._health_card_lines = get_health_card_lines()
             except Exception:
                 self._health_card_lines = ["Health data unavailable."]
+            # Also refresh workspace data
+            try:
+                self._workspace_lines = get_workspace_lines(self._active_workspace_tab)
+            except Exception:
+                self._workspace_lines = ["Workspace data unavailable."]
         finally:
             self._brief_refresh_busy = False
 
@@ -2397,11 +2465,13 @@ class JarvisUI:
         pad = 14
         bw = pw - 2 * pad
 
+        # Dynamic workspace title based on active tab
+        ws_title = "WORKSPACE: CHECKLIST" if self._active_workspace_tab == "todo" else "WORKSPACE: MEDIA"
         cards = [
             ("time", 0.22, "TIME", C_GOLD),
             ("weather", 0.20, "WEATHER · Grantham+UK", C_BLUE),
             ("system", 0.28, "SYSTEM STATUS", C_PRI),
-            ("health", 0.30, "HEALTH SUMMARY", C_GREEN),
+            ("workspace", 0.30, ws_title, C_GREEN),
         ]
         any_focus_active = bool(self._panel_focus) and (self._panel_focus_until > time.time())
         weights = []
@@ -2444,15 +2514,23 @@ class JarvisUI:
                               fill=muted_text, font=font_body(10), anchor="w")
 
             elif section == "weather":
+                c.delete("weather_text")
                 c.create_text(section_x+section_pad, current_y+58, text=self._weather_card["primary"],
-                              fill=muted_primary, font=font_display(10 if focus_boost > 0.08 else 10), anchor="w")
+                              fill=muted_primary, font=font_display(10 if focus_boost > 0.08 else 10),
+                              anchor="nw", width=section_bw, tags="weather_text")
                 c.create_text(section_x+section_pad, current_y+84, text=self._weather_card["city"].upper(),
-                              fill=muted_label, font=font_body_bold(10), anchor="w")
-                wy = current_y + 108
+                              fill=muted_label, font=font_body_bold(10),
+                              anchor="nw", width=section_bw, tags="weather_text")
+                wy = current_y + 107
                 for line in self._weather_card["details"][:3]:
-                    c.create_text(section_x+section_pad, wy, text=f"• {line}", fill=muted_text,
-                                  font=font_body(10), anchor="w")
-                    wy += 17
+                    text_item = c.create_text(section_x+section_pad, wy, text=f"• {line}", fill=muted_text,
+                                              font=font_body(10), anchor="nw", width=section_bw,
+                                              tags="weather_text")
+                    bbox = c.bbox(text_item)
+                    if bbox:
+                        wy += (bbox[3] - bbox[1]) + 4
+                    else:
+                        wy += 17
 
             elif section == "system":
                 cy = current_y + 44
@@ -2480,12 +2558,19 @@ class JarvisUI:
                 c.create_text(section_x+section_pad, cy+10, text=f"▲ {up_s}", fill=muted_warn, font=font_body(10), anchor="w")
                 c.create_text(section_x+section_pw-section_pad, cy+10, text=f"▼ {down_s}", fill=muted_green, font=font_body(10), anchor="e")
 
-            elif section == "health":
+            elif section == "workspace":
+                c.delete("workspace_text")
                 hy = current_y + 48
-                for line in self._health_card_lines[:5]:
-                    c.create_text(section_x+section_pad, hy, text=f"• {line}", fill=muted_text,
-                                  font=font_body(10), anchor="w")
-                    hy += 21
+                for line in self._workspace_lines[:4]:
+                    # Single draw — use anchor="nw" and measure bbox from the item itself
+                    text_item = c.create_text(section_x+section_pad, hy, text=f"• {line}", fill=muted_text,
+                                              font=font_body(10), anchor="nw", width=section_bw,
+                                              tags="workspace_text")
+                    bbox = c.bbox(text_item)
+                    if bbox:
+                        hy += (bbox[3] - bbox[1]) + 6
+                    else:
+                        hy += 21
 
             current_y += ph + gap
 

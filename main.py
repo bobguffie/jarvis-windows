@@ -473,6 +473,37 @@ TOOL_DECLARATIONS = [
             },
             "required": ["display_name", "phone_number"]
         }
+    },
+    {
+        "name": "switch_workspace_tab",
+        "description": (
+            "Switches the workspace dashboard card between the shared to-do list and the now-playing media tracker. "
+            "Use when the user says 'show my to-do list', 'show media tracker', 'switch workspace', "
+            "'show what's playing', 'show my checklist', 'switch to media' or 'switch to todo'."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "tab": {
+                    "type": "STRING",
+                    "description": "Which workspace view to show: 'todo' for the shared checklist, 'media' for now-playing media info"
+                }
+            },
+            "required": ["tab"]
+        }
+    },
+    {
+        "name": "refresh_workspace",
+        "description": (
+            "Instantly force-refreshes the workspace card data on the dashboard. "
+            "Use when the user says 'refresh the workspace', 'update the dashboard', "
+            "'refresh the media info', 'refresh the todo list', 'update now playing', "
+            "or any request to force an immediate reload of the workspace panel contents."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {}
+        }
     }
 ]
 
@@ -522,6 +553,8 @@ class JarvisLive:
                 self.ui.focus_panel("system", duration_ms=5200)
         elif tool_name == "get_weather":
             self.ui.focus_panel("weather", duration_ms=5600)
+        elif tool_name == "switch_workspace_tab":
+            self.ui.focus_panel("workspace", duration_ms=5600)
 
     def _on_text_command(self, text: str):
         if self._paused:
@@ -836,6 +869,15 @@ class JarvisLive:
                     ),
                 )
                 result = r or "WhatsApp contact saved."
+
+            elif name == "switch_workspace_tab":
+                tab = args.get("tab", "todo")
+                self._focus_ui_section_for_tool(name, args)
+                result = self.ui.switch_workspace_tab(tab)
+
+            elif name == "refresh_workspace":
+                self._focus_ui_section_for_tool("switch_workspace_tab", args)
+                result = self.ui.refresh_workspace_data()
 
             else:
                 result = f"Unknown tool: {name}"
