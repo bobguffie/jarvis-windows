@@ -31,6 +31,7 @@ from actions.media     import play_media
 from actions.weather   import get_weather_summary
 from actions.screen_vision import analyze_screen
 from actions.youtube_stats import get_youtube_channel_report
+from actions.workspace import get_todo_content, add_todo_item, remove_todo_item
 
 # ── Paths ───────────────────────────────────────────────────────────────────
 BASE_DIR        = Path(__file__).resolve().parent
@@ -504,6 +505,55 @@ TOOL_DECLARATIONS = [
             "type": "OBJECT",
             "properties": {}
         }
+    },
+    {
+        "name": "get_todo_content",
+        "description": (
+            "Reads and returns the complete text lines of the user's workspace to-do list. "
+            "Use when the user says 'what's on my list', 'show my todo list', "
+            "'read my checklist', 'what tasks do I have', or any request to view the full to-do list contents."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {}
+        }
+    },
+    {
+        "name": "add_todo_item",
+        "description": (
+            "Appends a brand new task or bullet point line to the active to-do list file. "
+            "Use when the user says 'add to my list', 'add a task', 'add to checklist', "
+            "'remember to', 'put this on my list', or any request to create a new todo item."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "task": {
+                    "type": "STRING",
+                    "description": "The task description to add to the to-do list."
+                }
+            },
+            "required": ["task"]
+        }
+    },
+    {
+        "name": "remove_todo_item",
+        "description": (
+            "Removes a completed task line from the to-do list file by searching for a matching keyword. "
+            "Use when the user says 'remove from my list', 'delete task', 'mark complete', "
+            "'cross off', 'finish task', or any request to remove a todo item. "
+            "It searches case-insensitively and removes any line containing the keyword."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "task_keyword": {
+                    "type": "STRING",
+                    "description": "A keyword or phrase to match against existing todo items. Lines containing this keyword will be removed."
+                }
+            },
+            "required": ["task_keyword"]
+        }
     }
 ]
 
@@ -878,6 +928,24 @@ class JarvisLive:
             elif name == "refresh_workspace":
                 self._focus_ui_section_for_tool("switch_workspace_tab", args)
                 result = self.ui.refresh_workspace_data()
+
+            elif name == "get_todo_content":
+                self._focus_ui_section_for_tool("switch_workspace_tab", args)
+                result = await loop.run_in_executor(None, get_todo_content)
+
+            elif name == "add_todo_item":
+                task = args.get("task", "")
+                result = await loop.run_in_executor(None, add_todo_item, task)
+                # Trigger UI refresh so the new item appears on screen
+                if "added" in str(result).lower():
+                    self.ui._refresh_workspace_data()
+
+            elif name == "remove_todo_item":
+                keyword = args.get("task_keyword", "")
+                result = await loop.run_in_executor(None, remove_todo_item, keyword)
+                # Trigger UI refresh so the removed item disappears from screen
+                if "removed" in str(result).lower() or ":" in str(result):
+                    self.ui._refresh_workspace_data()
 
             else:
                 result = f"Unknown tool: {name}"

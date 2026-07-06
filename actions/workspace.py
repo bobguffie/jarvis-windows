@@ -280,6 +280,98 @@ def read_todo_list() -> list[str]:
         return [f"Todo error: {str(e)[:40]}"]
 
 
+# ── Todo read/write operations ───────────────────────────────────────────────
+
+def get_todo_content() -> str:
+    """Reads and returns the complete text lines of the user's workspace to-do list.
+
+    Returns:
+        The full file content as a string, one line per item.
+    """
+    try:
+        if not TODO_PATH.exists():
+            TODO_PATH.parent.mkdir(parents=True, exist_ok=True)
+            TODO_PATH.write_text("Shared to-do list — edit this file\n", encoding="utf-8")
+            return "To-do list is empty."
+
+        lines = TODO_PATH.read_text(encoding="utf-8").splitlines()
+        items = [l.strip() for l in lines if l.strip()]
+        if not items:
+            return "To-do list is empty."
+        return "\n".join(items)
+    except PermissionError:
+        return "Todo file not accessible."
+    except OSError as e:
+        return f"Todo error: {str(e)[:60]}"
+
+
+def add_todo_item(task: str) -> str:
+    """Appends a brand new task or bullet point line to the active to-do list file.
+
+    Args:
+        task: The task description to add.
+
+    Returns:
+        A confirmation message.
+    """
+    if not task or not task.strip():
+        return "Task cannot be empty."
+    try:
+        # Ensure parent directory exists
+        TODO_PATH.parent.mkdir(parents=True, exist_ok=True)
+        # Append the task with a bullet prefix
+        with open(str(TODO_PATH), "a", encoding="utf-8") as f:
+            f.write(f"• {task.strip()}\n")
+        return f"Task added: {task.strip()}"
+    except PermissionError:
+        return "Todo file not accessible."
+    except OSError as e:
+        return f"Todo error: {str(e)[:60]}"
+
+
+def remove_todo_item(task_keyword: str) -> str:
+    """Removes a completed task line from the to-do list file by searching for a keyword.
+
+    Args:
+        task_keyword: A keyword or phrase to match against existing todo items.
+                      Lines containing this keyword (case-insensitive) will be removed.
+
+    Returns:
+        A confirmation message listing what was removed.
+    """
+    if not task_keyword or not task_keyword.strip():
+        return "Keyword cannot be empty."
+    try:
+        if not TODO_PATH.exists():
+            return "To-do list is empty — nothing to remove."
+
+        lines = TODO_PATH.read_text(encoding="utf-8").splitlines()
+        keyword_lower = task_keyword.strip().lower()
+        kept = []
+        removed = []
+
+        for line in lines:
+            if keyword_lower in line.strip().lower():
+                removed.append(line.strip())
+            else:
+                kept.append(line)
+
+        if not removed:
+            return f"No items matching '{task_keyword}' found."
+
+        # Overwrite the file with remaining lines
+        TODO_PATH.write_text("\n".join(kept) + ("\n" if kept else ""), encoding="utf-8")
+
+        if len(removed) == 1:
+            return f"Removed: {removed[0]}"
+        return f"Removed {len(removed)} items matching '{task_keyword}'."
+
+    except PermissionError:
+        return "Todo file not accessible."
+    except OSError as e:
+        return f"Todo error: {str(e)[:60]}"
+
+
 # ── Tab switching helper ─────────────────────────────────────────────────────
 
 def get_workspace_lines(tab: str) -> list[str]:
